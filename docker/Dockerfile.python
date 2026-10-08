@@ -1,0 +1,34 @@
+# ==============================================================================
+# Base Python Sandbox Image for Agentic Reviewer
+# Used for isolated merge simulation, build tests, and scanner execution
+# ==============================================================================
+FROM python:3.11-slim
+
+# Prevent interactive prompts and Python byte-compile clutter
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Install essential system build tools and git
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    build-essential \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install standard Python test runners and scanners
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    pytest \
+    pytest-cov \
+    ruff \
+    bandit \
+    semgrep
+
+# Set up unprivileged user and sandbox workspace
+RUN useradd -m -u 1000 sandbox
+WORKDIR /workspace
+
+USER sandbox
+CMD ["/bin/sh"]

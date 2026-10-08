@@ -1,191 +1,119 @@
-﻿"""
+"""
 core/orchestrator.py
 --------------------
-LangGraph orchestration graph skeleton.
-Each node is a thin stub that will be replaced by the real agent implementation
-in subsequent weeks. The graph compiles and runs end-to-end so the CLI works
-from day one.
+LangGraph Review Pipeline:
+  ingest → impact → merge_simulation → [security || dependency] → triage → report
 """
+
 from __future__ import annotations
 
 from typing import Any
 
 from langgraph.graph import END, StateGraph
 
+from agents.dependency_agent import run_dependency_agent
+from agents.impact_agent import run_impact_agent
+from agents.merge_sim_agent import run_merge_simulation_agent
+from agents.reporter_agent import run_reporter_agent
+from agents.security_agent import run_security_agent
+from agents.triage_agent import run_triage_agent
 from core.logging import get_logger
 from core.state import (
     ChangeSet,
     PipelineStage,
     ReviewState,
-    ReviewVerdict,
     make_initial_state,
 )
 
 logger = get_logger(__name__)
 
 
-# ── Stub node functions ───────────────────────────────────────────────────────
+# ── Pipeline Nodes ────────────────────────────────────────────────────────────
 
 
-def node_index(state: ReviewState) -> dict[str, Any]:
-    logger.info("stage", name=PipelineStage.INDEXING)
-    return {"stage": PipelineStage.INDEXING, "repo_index_id": "stub"}
+def node_ingest(state: ReviewState) -> dict[str, Any]:
+    """Ingest step: Validates the incoming changeset."""
+    logger.info("stage_start", stage="ingest")
+    cs = state.get("changeset")
+    if not cs:
+        return {"stage": PipelineStage.FAILED, "error": "No ChangeSet provided to review engine."}
+
+    logger.info("ingest_changeset_ready", repo=str(cs.repo_path), base=cs.base_ref, head=cs.head_ref)
+    return {"stage": PipelineStage.INIT}
 
 
 def node_impact(state: ReviewState) -> dict[str, Any]:
-    logger.info("stage", name=PipelineStage.IMPACT_ANALYSIS)
-    return {
-        "stage": PipelineStage.IMPACT_ANALYSIS,
-        "affected_files": [],
-        "affected_tests": [],
-        "blast_radius_score": 0.0,
-        "raw_diff": "",
-    }
+    """Impact step: Analyzes changed files, AST changes, and blast radius."""
+    return run_impact_agent(state)
 
 
-def node_merge_sim(state: ReviewState) -> dict[str, Any]:
-    logger.info("stage", name=PipelineStage.MERGE_SIMULATION)
-    return {"stage": PipelineStage.MERGE_SIMULATION, "simulation_result": None}
-
-
-def node_review(state: ReviewState) -> dict[str, Any]:
-    logger.info("stage", name="review_agent")
-    return {"review_findings": []}
+def node_merge_simulation(state: ReviewState) -> dict[str, Any]:
+    """Merge simulation step: Tests merge isolated in sandbox, isolates main baseline."""
+    return run_merge_simulation_agent(state)
 
 
 def node_security(state: ReviewState) -> dict[str, Any]:
-    logger.info("stage", name="security_agent")
-    return {"security_findings": []}
+    """Security analysis step: Scans changed files with Semgrep, Gitleaks, Bandit."""
+    return run_security_agent(state)
 
 
-def node_dependencies(state: ReviewState) -> dict[str, Any]:
-    logger.info("stage", name="dependency_agent")
-    return {"dependency_findings": []}
+def node_dependency(state: ReviewState) -> dict[str, Any]:
+    """Dependency analysis step: Scans modified manifest files with OSV/pip-audit."""
+    return run_dependency_agent(state)
 
 
 def node_triage(state: ReviewState) -> dict[str, Any]:
-    logger.info("stage", name=PipelineStage.TRIAGE_RCA)
-    all_findings = (
-        state.get("review_findings", [])
-        + state.get("security_findings", [])
-        + state.get("dependency_findings", [])
-    )
-    return {
-        "stage": PipelineStage.TRIAGE_RCA,
-        "all_findings": all_findings,
-        "root_causes": [],
-    }
+    """LLM triage step: Filters false positives, ranks severity, generates explanations."""
+    return run_triage_agent(state)
 
 
-def node_fix_generator(state: ReviewState) -> dict[str, Any]:
-    logger.info("stage", name=PipelineStage.FIX_GENERATION)
-    return {"stage": PipelineStage.FIX_GENERATION, "patch_proposals": []}
+def node_report(state: ReviewState) -> dict[str, Any]:
+    """Report step: Synthesizes findings, regressions, verdict, and emits report."""
+    return run_reporter_agent(state)
 
 
-def node_human_approval(state: ReviewState) -> dict[str, Any]:
-    """
-    Human-in-the-loop gate.
-    In a real graph this node raises ``NodeInterrupt`` so LangGraph pauses
-    and waits for an external ``graph.update_state(...)`` call carrying the
-    approval decision.  For the stub we auto-approve.
-    """
-    logger.info("stage", name=PipelineStage.HUMAN_APPROVAL, auto_approved=True)
-    approved_proposals = [
-        {**p.model_dump(), "approved": True} if hasattr(p, "model_dump") else p
-        for p in state.get("patch_proposals", [])
-    ]
-    return {"stage": PipelineStage.HUMAN_APPROVAL, "patch_proposals": approved_proposals}
-
-
-def node_verifier(state: ReviewState) -> dict[str, Any]:
-    logger.info("stage", name=PipelineStage.APPLY_AND_VERIFY)
-    return {"stage": PipelineStage.APPLY_AND_VERIFY, "verification_result": None}
-
-
-def node_reporter(state: ReviewState) -> dict[str, Any]:
-    logger.info("stage", name=PipelineStage.REPORTING)
-    cs: ChangeSet | None = state.get("changeset")
-    findings = state.get("all_findings", [])
-    report = (
-        f"# Agentic Review Report\n\n"
-        f"**Base:** `{cs.base_ref if cs else '?'}`  \n"
-        f"**Head:** `{cs.head_ref if cs else '?'}`\n\n"
-        f"## Findings ({len(findings)} total)\n\n"
-        + (
-            "\n".join(f"- [{f.severity.upper()}] {f.title}" for f in findings)
-            if findings
-            else "_No findings._"
-        )
-        + "\n\n---\n_Report generated by agentic-reviewer (stub pipeline)._\n"
-    )
-    return {
-        "stage": PipelineStage.DONE,
-        "verdict": ReviewVerdict.SAFE,
-        "risk_score": 0.0,
-        "report_markdown": report,
-    }
-
-
-# ── Router: after parallel analysis decide whether fixes are needed ───────────
-
-
-def route_after_triage(state: ReviewState) -> str:
-    findings = state.get("all_findings", [])
-    if findings:
-        return "fix_generator"
-    return "reporter"
-
-
-# ── Graph construction ────────────────────────────────────────────────────────
+# ── Graph Builder ─────────────────────────────────────────────────────────────
 
 
 def build_graph() -> StateGraph:
+    """
+    Build LangGraph review workflow with parallel Security and Dependency nodes.
+    """
     g = StateGraph(ReviewState)
 
-    g.add_node("indexer", node_index)
+    g.add_node("ingest", node_ingest)
     g.add_node("impact", node_impact)
-    g.add_node("merge_sim", node_merge_sim)
-    g.add_node("review", node_review)
+    g.add_node("merge_simulation", node_merge_simulation)
     g.add_node("security", node_security)
-    g.add_node("dependencies", node_dependencies)
+    g.add_node("dependency", node_dependency)
     g.add_node("triage", node_triage)
-    g.add_node("fix_generator", node_fix_generator)
-    g.add_node("human_approval", node_human_approval)
-    g.add_node("verifier", node_verifier)
-    g.add_node("reporter", node_reporter)
+    g.add_node("report", node_report)
 
-    g.set_entry_point("indexer")
-    g.add_edge("indexer", "impact")
-    g.add_edge("impact", "merge_sim")
+    g.set_entry_point("ingest")
+    g.add_edge("ingest", "impact")
+    g.add_edge("impact", "merge_simulation")
 
-    # Parallel analysis: merge_sim fans out to all three analysis agents
-    g.add_edge("merge_sim", "review")
-    g.add_edge("merge_sim", "security")
-    g.add_edge("merge_sim", "dependencies")
+    # Fan-out: run Security and Dependency scanners in parallel
+    g.add_edge("merge_simulation", "security")
+    g.add_edge("merge_simulation", "dependency")
 
-    # All three converge into triage
-    g.add_edge("review", "triage")
+    # Fan-in: combine findings for LLM triage
     g.add_edge("security", "triage")
-    g.add_edge("dependencies", "triage")
+    g.add_edge("dependency", "triage")
 
-    g.add_conditional_edges("triage", route_after_triage, {
-        "fix_generator": "fix_generator",
-        "reporter": "reporter",
-    })
-    g.add_edge("fix_generator", "human_approval")
-    g.add_edge("human_approval", "verifier")
-    g.add_edge("verifier", "reporter")
-    g.add_edge("reporter", END)
+    # Triage feeds into report
+    g.add_edge("triage", "report")
+    g.add_edge("report", END)
 
     return g
 
 
-# Compiled graph (module-level singleton, constructed once)
+# Module singleton compiled graph
 _graph = build_graph().compile()
 
 
 def run_review(changeset: ChangeSet) -> ReviewState:
-    """Run the full pipeline synchronously and return the final state."""
+    """Execute the review pipeline synchronously and return the final ReviewState."""
     initial = make_initial_state(changeset)
     final: ReviewState = _graph.invoke(initial)  # type: ignore[assignment]
     return final

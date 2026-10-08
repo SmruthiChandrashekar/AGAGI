@@ -1,71 +1,118 @@
-﻿# Agentic Reviewer
+# Agentic Code Reviewer & Security Triage (AGAGI)
 
-> Autonomous code review and vulnerability detection powered by LangGraph + LiteLLM.
+> Autonomous code review, merge simulation, blast radius analysis, vulnerability scanning, and LLM-powered triage built with LangGraph and LiteLLM.
 
-## Quick Start
+---
 
+## 🚀 Quick Start for Setup
+
+### 1. Clone the Repository
 ```bash
-# 1. Create and activate a virtualenv (Python 3.11)
-py -3.11 -m venv .venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # macOS / Linux
+git clone https://github.com/SmruthiChandrashekar/AGAGI.git
+cd AGAGI
+```
 
-# 2. Install all dependencies
+### 2. Create and Activate Virtual Environment (Python 3.11 recommended)
+```bash
+# Windows (PowerShell / CMD)
+python -m venv .venv
+.\.venv\Scripts\activate
+
+# macOS / Linux
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install Dependencies
+```bash
 pip install -e ".[dev]"
+```
 
-# 3. Copy the env template and fill in your keys
-copy .env.example .env          # Windows
-# cp .env.example .env          # macOS / Linux
+### 4. Configure Environment (.env)
+```bash
+# Windows
+copy .env.example .env
 
-# 4. Install pre-commit hooks
-pre-commit install
+# macOS / Linux
+cp .env.example .env
+```
+Open `.env` and add your free LLM API key(s):
+- `GEMINI_API_KEY` ([Get free key at Google AI Studio](https://aistudio.google.com/apikey))
+- `GROQ_API_KEY` ([Get free key at Groq Console](https://console.groq.com/keys))
 
-# 5. Run the smoke tests
+---
+
+## 🖥️ Running the Web Dashboard
+
+Start the review server:
+```bash
+python -m ui.server
+```
+Then open your browser and navigate to:
+👉 **[http://127.0.0.1:8080](http://127.0.0.1:8080)**
+
+From the dashboard you can:
+1. **Local Mode**: Select a local repository and choose which branch to review against `main`.
+2. **GitHub Mode**: Paste a GitHub Personal Access Token (PAT), select any of your GitHub repositories, and review open/closed pull requests live!
+3. **Interactive Tabs**: Inspect Impact Analysis (call graph & blast radius), Security & Triage (Semgrep/Bandit/Gitleaks/OSV), Test Logs (JUnit regressions vs pre-existing), Git Diff, and the full Markdown Review Report.
+
+---
+
+## 🧪 Testing with the Built-in Demo Repo (`calc-demo`)
+
+You can generate the complete multi-branch calculator testbed repository in one command:
+```bash
+python tools/build_calc_demo.py
+```
+This builds `C:\Users\<user>\Desktop\calculator` (or `./calculator`) with all 5 test branches:
+- `clean-merge`: Clean addition of `multiply()` function (verdict: **SAFE**).
+- `breaks-test`: Modifies `average(nums)` signature, merges cleanly but introduces test regressions (verdict: **NEEDS_CHANGES**).
+- `conflict`: Modifies same lines on `main` and branch (verdict: **BLOCKED**).
+- `build-error`: Introduces a Python syntax error (verdict: **NEEDS_CHANGES**).
+- `main`: Baseline branch with isolated baseline tests.
+
+---
+
+## 🛠️ CLI Review Tool (Mode B)
+
+You can also run reviews directly from your terminal:
+```bash
+# Review a local repository branch
+python -m adapters.cli.main review --repo /path/to/repo --base main --head feature-branch
+
+# Or via installed console script
+agentreview review --repo /path/to/repo --base main --head feature-branch --output report.md
+```
+
+---
+
+## 🧪 Running the Test Suite
+
+Run the full pytest suite (40 tests across all modules):
+```bash
 pytest
 ```
 
-## CLI Usage (Mode B – Standalone)
+---
 
-```bash
-# Review a local branch against main
-agentreview review --repo . --base main --head feature/my-branch
+## 🏗️ Architecture & Pipeline Flow
 
-# Write the report to a file
-agentreview review --repo . --base main --head HEAD --output report.md
+The review orchestrator runs as a LangGraph DAG:
 ```
-
-## API Keys (free tier)
-
-| Key | Where to get it |
-|---|---|
-| `GEMINI_API_KEY` | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
-| `GROQ_API_KEY`   | [console.groq.com/keys](https://console.groq.com/keys) |
-
-Set them in your `.env` file (copy from `.env.example`).
-
-## Project Structure
-
-```
-agentic-reviewer/
-├── core/           # state schema, orchestrator graph, config, LLM wrapper
-├── agents/         # one module per agent (Week 2+)
-├── tools/          # semgrep, docker runner, git ops, scanners (Week 3+)
-├── indexer/        # tree-sitter, dependency graph, embeddings (Week 2)
-├── adapters/
-│   ├── cli/        # Typer CLI  ← working now
-│   └── github_app/ # FastAPI webhook (Week 7)
-├── ui/             # Streamlit approval dashboard (Week 6)
-├── eval/           # benchmark scripts (Week 8)
-├── docker/         # sandbox images (Week 3)
-└── tests/          # pytest suite
-```
-
-## Development Commands
-
-```bash
-pytest                  # run tests with coverage
-ruff check .            # lint
-ruff format .           # format
-mypy .                  # type-check
-pre-commit run --all-files   # run all hooks manually
+  [Ingest ChangeSet]
+          │
+          ▼
+  [Impact Analysis & Graph]  ── (Tree-sitter AST, caller graph, blast radius score)
+          │
+          ▼
+  [Merge Simulation]         ── (Isolated Docker sandbox / worktree, isolates pre-existing main failures)
+          ├───► [Security Agent]     ── (Semgrep, Gitleaks, Bandit on changed files, deduplication)
+          │             │
+          └───► [Dependency Agent]   ── (pip-audit / OSV-Scanner on changed manifest files)
+                        │
+                        ▼
+               [LLM Triage Agent]    ── (Filters false positives, untrusted code guardrails, auto-retry schema)
+                        │
+                        ▼
+               [Reporter Agent]      ── (Computes verdict: SAFE, NEEDS_CHANGES, BLOCKED; emits report)
 ```

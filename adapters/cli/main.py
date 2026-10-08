@@ -1,4 +1,4 @@
-﻿"""
+"""
 adapters/cli/main.py
 --------------------
 Typer-based CLI entry point.
@@ -10,7 +10,6 @@ Usage:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -61,14 +60,14 @@ def review(
         "-H",
         help="Head git ref to review against base.",
     ),
-    patch: Optional[Path] = typer.Option(
+    patch: Path | None = typer.Option(
         None,
         "--patch",
         "-p",
         help="Path to a .patch file (alternative to --base / --head).",
         exists=False,
     ),
-    output: Optional[Path] = typer.Option(
+    output: Path | None = typer.Option(
         None,
         "--output",
         "-o",
@@ -95,7 +94,7 @@ def review(
     console.print()
 
     # Lazy import so the CLI starts fast even if heavy deps are slow to load.
-    from core.orchestrator import run_review  # noqa: PLC0415
+    from core.orchestrator import run_review
 
     result = run_review(changeset)
 
@@ -107,9 +106,22 @@ def review(
 
 
 @app.command()
+def ui(
+    host: str = typer.Option("127.0.0.1", "--host", help="Host address to bind to"),
+    port: int = typer.Option(8080, "--port", help="Port to serve the web UI"),
+) -> None:
+    """Launch the Phosphor HUD web UI."""
+    console.print(f"[bold green]Starting Phosphor HUD UI at http://{host}:{port}[/bold green]")
+    import uvicorn
+
+    uvicorn.run("ui.server:app", host=host, port=port, reload=False)
+
+
+@app.command()
 def version() -> None:
     """Print the installed version."""
-    from importlib.metadata import version as _v, PackageNotFoundError  # noqa: PLC0415
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _v
 
     try:
         v = _v("agentic-reviewer")

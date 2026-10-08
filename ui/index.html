@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agentic Code Reviewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #111827;
+      --card-border: #1f2937;
+      --card-hover: #1e293b;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      --success: #10b981;
+      --success-bg: rgba(16, 185, 129, 0.12);
+      --danger: #ef4444;
+      --danger-bg: rgba(239, 68, 68, 0.12);
+      --warning: #f59e0b;
+      --warning-bg: rgba(245, 158, 11, 0.12);
+      --purple: #8b5cf6;
+      --purple-bg: rgba(139, 92, 246, 0.12);
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.5;
+      padding: 24px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-logo { font-size: 28px; }
+    .brand-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .brand-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 6px 12px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--success);
+      border-radius: 9999px;
+      font-weight: 500;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    /* Mode Navigation Tabs */
+    .mode-nav {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .btn-mode {
+      padding: 10px 20px;
+      background: #111827;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+    }
+    .btn-mode:hover {
+      background: var(--card-hover);
+      color: #fff;
+    }
+    .btn-mode.active {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* Controls Grid */
+    .controls-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 900px) {
+      .controls-grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-tag {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--primary);
+    }
+
+    .form-group { margin-bottom: 14px; }
+    .form-group:last-child { margin-bottom: 0; }
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-input, .form-select {
+      width: 100%;
+      padding: 10px 12px;
+      background: #0d131f;
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+    .form-input:focus, .form-select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .presets-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+      margin-bottom: 12px;
+    }
+    .btn-preset {
+      font-size: 11px;
+      padding: 4px 8px;
+      background: #1f2937;
+      border: 1px solid #374151;
+      color: var(--text-muted);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-preset:hover {
+      background: #374151;
+      color: #fff;
+    }
+
+    .btn-primary {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 600;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background-color 0.15s ease;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* Pipeline Progress Tracker */
+    .pipeline-tracker {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 16px 24px;
+      margin-bottom: 24px;
+    }
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #1f2937;
+      color: var(--text-dim);
+      font-weight: 600;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .step-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-dim);
+    }
+    .step-line {
+      flex: 1;
+      height: 2px;
+      background: #1f2937;
+      margin: 0 16px;
+    }
+    .step-item.active .step-num {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+    }
+    .step-item.active .step-name { color: #fff; }
+    .step-item.done .step-num {
+      background: var(--success);
+      color: #fff;
+    }
+    .step-item.done .step-name { color: var(--text); }
+    .step-line.done { background: var(--success); }
+
+    /* Outcome Banner */
+    .outcome-banner {
+      padding: 20px 24px;
+      border-radius: var(--radius);
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .outcome-banner.ready {
+      background: rgba(31, 41, 55, 0.5);
+      border-color: var(--card-border);
+    }
+    .outcome-banner.passed {
+      background: var(--success-bg);
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+    .outcome-banner.tests-failed {
+      background: var(--danger-bg);
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+    .outcome-banner.conflict {
+      background: var(--warning-bg);
+      border-color: rgba(245, 158, 11, 0.4);
+    }
+    .outcome-banner.build-error {
+      background: var(--purple-bg);
+      border-color: rgba(139, 92, 246, 0.4);
+    }
+
+    .outcome-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .outcome-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .verdict-chip {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 16px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .verdict-chip.safe { background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid var(--success); }
+    .verdict-chip.needs_changes { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
+    .verdict-chip.blocked { background: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .metric-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .metric-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .metric-val {
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Tabs Section */
+    .tabs-header {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 16px;
+    }
+    .tab-btn {
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .tab-btn:hover { color: #fff; }
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .tab-pane {
+      display: none;
+      background: #0d131f;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .tab-pane.active { display: block; }
+
+    pre, code { font-family: 'JetBrains Mono', monospace; }
+    .terminal-box {
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 480px;
+      overflow-y: auto;
+      color: #e2e8f0;
+    }
+
+    .list-item {
+      padding: 10px 12px;
+      background: #111827;
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .risk-alert {
+      padding: 12px 16px;
+      border-radius: 6px;
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #93c5fd;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+
+    .pr-helper-box {
+      padding: 14px;
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      border-radius: 6px;
+      margin-top: 10px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .pr-helper-box a {
+      color: var(--primary);
+      text-decoration: underline;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-logo">🤖</div>
+        <div>
+          <div class="brand-title">Agentic Reviewer</div>
+          <div class="brand-subtitle">Autonomous Code Review, Impact Analysis & Merge Simulation</div>
+        </div>
+      </div>
+      <div class="status-badge">
+        <span class="status-dot"></span>
+        <span id="serverStatusText">System Online</span>
+      </div>
+    </header>
+
+    <!-- Review Source Mode Navigation -->
+    <div class="mode-nav">
+      <button class="btn-mode active" id="modeBtnLocal" onclick="setMode('local')">
+        📁 Local Repository
+      </button>
+      <button class="btn-mode" id="modeBtnGithub" onclick="setMode('github')">
+        🐙 GitHub Account & Pull Requests
+      </button>
+    </div>
+
+    <!-- Controls Row -->
+    <div class="controls-grid">
+      <!-- Mode 1: Local Workspace -->
+      <div class="card" id="cardLocalMode">
+        <div class="card-title">
+          <span>Local Repository</span>
+          <span class="card-tag">Fast & Direct</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="localRepoPath">Repository Path</label>
+          <input type="text" id="localRepoPath" class="form-input" value="C:\Users\LENOVO\Desktop\calculator" onchange="loadBranches()" />
+          <div class="presets-row">
+            <button class="btn-preset" onclick="setPreset('C:\\Users\\LENOVO\\Desktop\\calculator')">Calculator Demo</button>
+            <button class="btn-preset" onclick="setPreset('.')">Current Repo (.)</button>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="localBaseRef">Base Branch</label>
+            <input type="text" id="localBaseRef" class="form-input" value="main" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="localHeadRef">Head / Feature Branch</label>
+            <select id="localHeadRef" class="form-select">
+              <option value="breaks-test">breaks-test (Fails test suite)</option>
+              <option value="clean-merge">clean-merge (Passes clean)</option>
+              <option value="conflict">conflict (Merge conflict)</option>
+              <option value="build-error">build-error (Syntax error)</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="btn-primary" id="btnRunLocalReview" onclick="runReview()">
+          <span>▶</span>
+          <span id="btnText">Run Review & Simulation</span>
+        </button>
+      </div>
+
+      <!-- Mode 2: GitHub Account -->
+      <div class="card" id="cardGithubMode" style="display: none;">
+        <div class="card-title">
+          <span>GitHub Cloud Account</span>
+          <span class="card-tag" style="background: rgba(16, 185, 129, 0.15); color: var(--success);">Remote PRs</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="ghToken">Personal Access Token (PAT)</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="password" id="ghToken" class="form-input" placeholder="ghp_... or github_pat_..." />
+            <button class="btn-preset" style="padding: 0 12px; font-weight: 600;" onclick="connectGitHub()">Connect</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="ghRepoSelect">Repository</label>
+          <select id="ghRepoSelect" class="form-select" onchange="loadGitHubPRs()">
+            <option value="">-- Connect token to load repositories --</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="ghPRSelect">Pull Request</label>
+          <select id="ghPRSelect" class="form-select">
+            <option value="">-- Select a repository first --</option>
+          </select>
+        </div>
+
+        <div id="ghPRHelper"></div>
+
+        <button class="btn-primary" id="btnRunGHReview" onclick="runGitHubReview()" style="margin-top: 10px;">
+          <span>▶</span>
+          <span id="btnGHText">Review Selected PR</span>
+        </button>
+      </div>
+
+      <!-- Card: Code Search / Retrieval (Week 2) -->
+      <div class="card">
+        <div class="card-title">
+          <span>Code Retriever (Week 2)</span>
+          <span class="card-tag">AST + Tokens</span>
+        </div>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+          Search functions, classes, and documentation indexed across the codebase.
+        </p>
+        <div class="form-group">
+          <label class="form-label" for="searchQuery">Natural Language / Symbol Query</label>
+          <input type="text" id="searchQuery" class="form-input" placeholder="e.g. average calculation, multiply, report" value="average calculation" />
+        </div>
+        <button class="btn-primary" style="background: #4b5563;" onclick="searchCode()">
+          🔍 Search Indexed Chunks
+        </button>
+        <div id="searchResults" style="margin-top: 12px; font-size: 12px;"></div>
+      </div>
+    </div>
+
+    <!-- Pipeline Progress Tracker -->
+    <div class="pipeline-tracker">
+      <div class="step-item" id="step1">
+        <div class="step-num">1</div>
+        <div class="step-name">Ingest</div>
+      </div>
+      <div class="step-line" id="line1"></div>
+      <div class="step-item" id="step2">
+        <div class="step-num">2</div>
+        <div class="step-name">Impact Analysis (v2)</div>
+      </div>
+      <div class="step-line" id="line2"></div>
+      <div class="step-item" id="step3">
+        <div class="step-num">3</div>
+        <div class="step-name">Merge Sim</div>
+      </div>
+      <div class="step-line" id="line3"></div>
+      <div class="step-item" id="step4">
+        <div class="step-num">4</div>
+        <div class="step-name">Report</div>
+      </div>
+    </div>
+
+    <!-- Outcome Banner -->
+    <div class="outcome-banner ready" id="outcomeBanner">
+      <div>
+        <div class="outcome-title" id="outcomeTitle">Ready for Review</div>
+        <div class="outcome-subtitle" id="outcomeSubtitle">Select branch or PR above and click Run Review.</div>
+      </div>
+      <div>
+        <span class="verdict-chip safe" id="verdictChip">STANDBY</span>
+      </div>
+    </div>
+
+    <!-- Metrics Grid -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">Verdict</div>
+        <div class="metric-val" id="metricVerdict" style="font-size: 20px;">-</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Risk Score</div>
+        <div class="metric-val" id="metricRisk">-</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Blast Radius</div>
+        <div class="metric-val" id="metricBlast">-</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Changed Funcs</div>
+        <div class="metric-val" id="metricFuncs">-</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Affected Files</div>
+        <div class="metric-val" id="metricFiles">-</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Affected Tests</div>
+        <div class="metric-val" id="metricTests">-</div>
+      </div>
+    </div>
+
+    <!-- Details Tabs -->
+    <div class="card" style="padding: 16px;">
+      <div class="tabs-header">
+        <button class="tab-btn active" onclick="switchTab('impact')">Impact Analysis (Week 2)</button>
+        <button class="tab-btn" onclick="switchTab('security')">Security & Triage</button>
+        <button class="tab-btn" onclick="switchTab('tests')">Merge & Test Logs</button>
+        <button class="tab-btn" onclick="switchTab('diff')">Git Diff</button>
+        <button class="tab-btn" onclick="switchTab('report')">Full Report</button>
+      </div>
+
+      <!-- Tab: Impact Analysis -->
+      <div class="tab-pane active" id="tabImpact">
+        <div id="riskHintAlert" class="risk-alert">Run a review to see the impact analysis and caller graph traversal.</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div>
+            <h4 style="font-size: 14px; margin-bottom: 8px; color: #fff;">Changed Functions / Symbols</h4>
+            <div id="listChangedFuncs" style="font-size: 13px; color: var(--text-muted);">None detected yet.</div>
+          </div>
+          <div>
+            <h4 style="font-size: 14px; margin-bottom: 8px; color: #fff;">Affected Test Suites (Prioritized)</h4>
+            <div id="listAffectedTests" style="font-size: 13px; color: var(--text-muted);">None detected yet.</div>
+          </div>
+        </div>
+        <div style="margin-top: 16px;">
+          <h4 style="font-size: 14px; margin-bottom: 8px; color: #fff;">All Affected Files</h4>
+          <div id="listAffectedFiles" style="font-size: 13px; color: var(--text-muted);">None detected yet.</div>
+        </div>
+      </div>
+
+      <!-- Tab: Security & Triage -->
+      <div class="tab-pane" id="tabSecurity">
+        <div id="findingsAlert" class="risk-alert" style="margin-bottom: 14px;">Run a review to scan for security vulnerabilities, secrets, and dependencies.</div>
+        <div id="listFindings" style="display: flex; flex-direction: column; gap: 12px;"></div>
+      </div>
+
+      <!-- Tab: Test Logs -->
+      <div class="tab-pane" id="tabTests">
+        <pre class="terminal-box" id="testLogsBox">No tests executed yet.</pre>
+      </div>
+
+      <!-- Tab: Diff -->
+      <div class="tab-pane" id="tabDiff">
+        <pre class="terminal-box" id="diffBox">No diff preview available.</pre>
+      </div>
+
+      <!-- Tab: Full Report -->
+      <div class="tab-pane" id="tabReport">
+        <pre class="terminal-box" id="reportBox">No report generated yet.</pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function setMode(mode) {
+      const isLocal = mode === 'local';
+      document.getElementById('cardLocalMode').style.display = isLocal ? 'block' : 'none';
+      document.getElementById('cardGithubMode').style.display = isLocal ? 'none' : 'block';
+      document.getElementById('modeBtnLocal').classList.toggle('active', isLocal);
+      document.getElementById('modeBtnGithub').classList.toggle('active', !isLocal);
+    }
+
+    function setPreset(path) {
+      document.getElementById('localRepoPath').value = path;
+      loadBranches();
+    }
+
+    async function loadBranches() {
+      const repoPath = document.getElementById('localRepoPath').value.trim();
+      const select = document.getElementById('localHeadRef');
+      try {
+        const res = await fetch(`/api/local/branches?repo_path=${encodeURIComponent(repoPath)}`);
+        const data = await res.json();
+        if (data.branches && data.branches.length) {
+          const currentVal = select.value;
+          select.innerHTML = '';
+          data.branches.forEach(b => {
+            if (b !== 'main') {
+              const opt = document.createElement('option');
+              opt.value = b;
+              opt.textContent = b;
+              select.appendChild(opt);
+            }
+          });
+          if (data.branches.includes(currentVal)) {
+            select.value = currentVal;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load branches:', e);
+      }
+    }
+
+    // ── GitHub Integration ────────────────────────────────────────────────────
+    async function connectGitHub() {
+      const token = document.getElementById('ghToken').value.trim();
+      if (!token) return alert('Please enter your GitHub Personal Access Token.');
+      localStorage.setItem('gh_pat', token);
+
+      const repoSelect = document.getElementById('ghRepoSelect');
+      repoSelect.innerHTML = '<option>Loading repositories...</option>';
+
+      try {
+        const res = await fetch('/api/github/repos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail);
+
+        repoSelect.innerHTML = '<option value="">-- Choose a Repository --</option>';
+        data.repos.forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = r.full_name;
+          opt.textContent = `${r.name} (${r.full_name})`;
+          if (r.name.toLowerCase().includes('calculator')) {
+            opt.selected = true;
+          }
+          repoSelect.appendChild(opt);
+        });
+
+        if (repoSelect.value) {
+          loadGitHubPRs();
+        }
+      } catch (err) {
+        alert('GitHub Connection Error: ' + err.message);
+        repoSelect.innerHTML = '<option value="">Connection failed</option>';
+      }
+    }
+
+    async function loadGitHubPRs() {
+      const token = document.getElementById('ghToken').value.trim() || localStorage.getItem('gh_pat') || '';
+      const repoFullName = document.getElementById('ghRepoSelect').value;
+      const prSelect = document.getElementById('ghPRSelect');
+      const helper = document.getElementById('ghPRHelper');
+      helper.innerHTML = '';
+
+      if (!repoFullName) {
+        prSelect.innerHTML = '<option value="">-- Select a repository first --</option>';
+        return;
+      }
+
+      prSelect.innerHTML = '<option>Loading pull requests...</option>';
+
+      try {
+        const res = await fetch('/api/github/pulls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, repo_full_name: repoFullName })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail);
+
+        if (!data.pulls || !data.pulls.length) {
+          prSelect.innerHTML = '<option value="">No open PRs found</option>';
+          helper.innerHTML = `
+            <div class="pr-helper-box">
+              ℹ️ No Pull Requests found in <b>${repoFullName}</b>.<br>
+              👉 <a href="https://github.com/${repoFullName}/compare/main...breaks-test?expand=1" target="_blank">Click here to open a PR on GitHub (comparing main ← breaks-test)</a><br>
+              Once created on GitHub, re-select the repo to review it!
+            </div>
+          `;
+          return;
+        }
+
+        prSelect.innerHTML = '';
+        data.pulls.forEach(pr => {
+          const opt = document.createElement('option');
+          opt.value = pr.number;
+          opt.textContent = `#${pr.number}: ${pr.title} [${pr.state.toUpperCase()}] (by @${pr.author})`;
+          prSelect.appendChild(opt);
+        });
+      } catch (err) {
+        prSelect.innerHTML = `<option value="">Error: ${err.message}</option>`;
+      }
+    }
+
+    async function runGitHubReview() {
+      const token = document.getElementById('ghToken').value.trim() || localStorage.getItem('gh_pat');
+      const repo_full_name = document.getElementById('ghRepoSelect').value;
+      const pr_number = parseInt(document.getElementById('ghPRSelect').value, 10);
+
+      if (!token) return alert('Please enter your GitHub Personal Access Token.');
+      if (!repo_full_name) return alert('Please select a repository.');
+      if (!pr_number) return alert('Please select a valid Pull Request.');
+
+      const btn = document.getElementById('btnRunGHReview');
+      const btnText = document.getElementById('btnGHText');
+      btn.disabled = true;
+      btnText.textContent = 'Cloning & Reviewing PR...';
+
+      setStage('ingest');
+      setTimeout(() => setStage('impact'), 400);
+      setTimeout(() => setStage('merge'), 1200);
+
+      try {
+        const res = await fetch('/api/github/review-pr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, repo_full_name, pr_number })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'GitHub PR review failed');
+
+        setStage('done');
+        renderResults(data);
+      } catch (err) {
+        alert('GitHub PR Review Error: ' + err.message);
+        document.getElementById('outcomeTitle').textContent = 'Error Reviewing PR';
+        document.getElementById('outcomeSubtitle').textContent = err.message;
+      } finally {
+        btn.disabled = false;
+        btnText.textContent = 'Review Selected PR';
+      }
+    }
+
+    function setStage(stage) {
+      const steps = ['step1', 'step2', 'step3', 'step4'];
+      const lines = ['line1', 'line2', 'line3'];
+      
+      steps.forEach(s => {
+        document.getElementById(s).classList.remove('active', 'done');
+      });
+      lines.forEach(l => {
+        document.getElementById(l).classList.remove('done');
+      });
+
+      if (stage === 'ingest') {
+        document.getElementById('step1').classList.add('active');
+      } else if (stage === 'impact') {
+        document.getElementById('step1').classList.add('done');
+        document.getElementById('line1').classList.add('done');
+        document.getElementById('step2').classList.add('active');
+      } else if (stage === 'merge') {
+        document.getElementById('step1').classList.add('done');
+        document.getElementById('step2').classList.add('done');
+        document.getElementById('line1').classList.add('done');
+        document.getElementById('line2').classList.add('done');
+        document.getElementById('step3').classList.add('active');
+      } else if (stage === 'done') {
+        steps.forEach(s => document.getElementById(s).classList.add('done'));
+        lines.forEach(l => document.getElementById(l).classList.add('done'));
+      }
+    }
+
+    async function runReview() {
+      const repo_path = document.getElementById('localRepoPath').value.trim();
+      const base_ref = document.getElementById('localBaseRef').value.trim();
+      const head_ref = document.getElementById('localHeadRef').value.trim();
+
+      const btn = document.getElementById('btnRunLocalReview');
+      const btnText = document.getElementById('btnText');
+      btn.disabled = true;
+      btnText.textContent = 'Running Pipeline...';
+
+      setStage('ingest');
+      setTimeout(() => setStage('impact'), 300);
+      setTimeout(() => setStage('merge'), 800);
+
+      try {
+        const res = await fetch('/api/review/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo_path, base_ref, head_ref })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Review failed');
+
+        setStage('done');
+        renderResults(data);
+
+      } catch (err) {
+        alert('Error: ' + err.message);
+        document.getElementById('outcomeTitle').textContent = 'Error Running Review';
+        document.getElementById('outcomeSubtitle').textContent = err.message;
+      } finally {
+        btn.disabled = false;
+        btnText.textContent = 'Run Review & Simulation';
+      }
+    }
+
+    function renderResults(data) {
+      const outcome = data.merge_outcome || 'all passed';
+      const verdict = (data.verdict || 'safe').toUpperCase();
+      const banner = document.getElementById('outcomeBanner');
+      const title = document.getElementById('outcomeTitle');
+      const subtitle = document.getElementById('outcomeSubtitle');
+      const chip = document.getElementById('verdictChip');
+
+      banner.className = 'outcome-banner';
+      if (outcome === 'conflict') {
+        banner.classList.add('conflict');
+        title.textContent = 'FAIL // Merge Conflict Detected';
+        subtitle.textContent = `Merge conflicted in ${data.conflicted_files ? data.conflicted_files.length : 1} file(s). Automatic merge aborted.`;
+        chip.className = 'verdict-chip blocked';
+        chip.textContent = 'BLOCKED';
+      } else if (outcome === 'install error') {
+        banner.classList.add('build-error');
+        title.textContent = 'FAIL // Dependency Install Error';
+        subtitle.textContent = 'Package installation or dependencies failed in the sandbox.';
+        chip.className = 'verdict-chip blocked';
+        chip.textContent = 'BLOCKED';
+      } else if (outcome === 'build error') {
+        banner.classList.add('build-error');
+        title.textContent = 'FAIL // Build / Syntax Error';
+        subtitle.textContent = 'Compilation or syntax error occurred during test collection.';
+        chip.className = 'verdict-chip needs_changes';
+        chip.textContent = 'NEEDS CHANGES';
+      } else if (outcome === 'timeout') {
+        banner.classList.add('conflict');
+        title.textContent = 'FAIL // Sandbox Execution Timeout';
+        subtitle.textContent = 'Execution exceeded time quota. Container safely stopped.';
+        chip.className = 'verdict-chip blocked';
+        chip.textContent = 'BLOCKED';
+      } else if (outcome === 'test failure' || outcome === 'tests failed') {
+        banner.classList.add('tests-failed');
+        const regCount = (data.regressions || []).length;
+        title.textContent = `FAIL // ${regCount} New Regression(s) Detected`;
+        subtitle.textContent = 'Changes merged cleanly but introduced new test failure regressions.';
+        chip.className = 'verdict-chip needs_changes';
+        chip.textContent = 'NEEDS CHANGES';
+      } else {
+        banner.classList.add('passed');
+        const peCount = (data.pre_existing_failures || []).length;
+        title.textContent = 'PASS // Merge Simulation & Tests Passed';
+        subtitle.textContent = peCount > 0
+          ? `All changes merged cleanly. ${peCount} pre-existing failure(s) on main were detected but not blamed on this PR.`
+          : 'All changes merged cleanly and automated tests passed with 0 regressions.';
+        chip.className = 'verdict-chip safe';
+        chip.textContent = 'SAFE';
+      }
+
+      // Metrics
+      document.getElementById('metricVerdict').textContent = verdict;
+      document.getElementById('metricRisk').textContent = (data.risk_score || 0).toFixed(1);
+      document.getElementById('metricBlast').textContent = (data.blast_radius_score || 0).toFixed(2);
+      document.getElementById('metricFuncs').textContent = (data.changed_functions || []).length;
+      document.getElementById('metricFiles').textContent = (data.affected_files || []).length;
+      document.getElementById('metricTests').textContent = (data.affected_tests || []).length;
+
+      // Impact Details (Week 2)
+      document.getElementById('riskHintAlert').textContent = data.risk_hint || 'No risk hint available.';
+
+      const funcsEl = document.getElementById('listChangedFuncs');
+      const funcs = data.changed_functions || [];
+      if (funcs.length) {
+        funcsEl.innerHTML = funcs.map(f => `<div class="list-item"><b>${f}</b></div>`).join('');
+      } else {
+        funcsEl.textContent = 'None identified from diff.';
+      }
+
+      const testsEl = document.getElementById('listAffectedTests');
+      const regressions = data.regressions || [];
+      const preExisting = data.pre_existing_failures || [];
+      const affectedTests = data.affected_tests || [];
+
+      let testsHtml = '';
+      if (regressions.length) {
+        testsHtml += regressions.map(r => `
+          <div class="list-item" style="border-left: 3px solid var(--danger);">
+            <div style="font-weight:600; color:var(--danger)">❌ REGRESSION: ${r.name}</div>
+            <div style="font-size:11px; color:var(--text-muted);">${r.file}${r.failing_line ? ':' + r.failing_line : ''}</div>
+            ${r.error_message ? `<div style="font-size:11px; color:#fca5a5; margin-top:2px;">${r.error_message}</div>` : ''}
+          </div>
+        `).join('');
+      }
+      if (preExisting.length) {
+        testsHtml += preExisting.map(p => `
+          <div class="list-item" style="border-left: 3px solid var(--warning);">
+            <div style="font-weight:600; color:var(--warning)">⚠️ PRE-EXISTING ON MAIN: ${p.name}</div>
+            <div style="font-size:11px; color:var(--text-muted);">${p.file} (Passes PR check; already failing on baseline)</div>
+          </div>
+        `).join('');
+      }
+      if (!regressions.length && !preExisting.length) {
+        if (affectedTests.length) {
+          testsHtml = affectedTests.map(t => `<div class="list-item" style="color:var(--success)">🎯 <b>${t}</b> (Passed)</div>`).join('');
+        } else {
+          testsHtml = '<div style="color:var(--text-muted);">No tests failed.</div>';
+        }
+      }
+      testsEl.innerHTML = testsHtml;
+
+      const filesEl = document.getElementById('listAffectedFiles');
+      const files = data.affected_files || [];
+      if (files.length) {
+        filesEl.innerHTML = files.map(f => `<span class="list-item" style="display:inline-block; margin-right:6px;">📄 ${f}</span>`).join(' ');
+      } else {
+        filesEl.textContent = 'No files affected.';
+      }
+
+      // Logs & Diff
+      const testRes = data.test_results || {};
+      document.getElementById('testLogsBox').textContent = testRes.output || testRes.error || 'Clean merge with no test logs.';
+      document.getElementById('diffBox').textContent = data.diff_preview || 'No diff text available.';
+      document.getElementById('reportBox').textContent = data.report_markdown || 'No report generated.';
+
+      // Security & Triage Findings
+      const findings = data.findings || [];
+      const findingsAlert = document.getElementById('findingsAlert');
+      const listFindings = document.getElementById('listFindings');
+
+      if (!findings.length) {
+        findingsAlert.className = 'risk-alert';
+        findingsAlert.style.borderColor = 'var(--success)';
+        findingsAlert.style.background = 'rgba(16, 185, 129, 0.1)';
+        findingsAlert.style.color = '#34d399';
+        findingsAlert.textContent = '✅ No confirmed security vulnerabilities or vulnerable dependencies detected in this PR.';
+        listFindings.innerHTML = '';
+      } else {
+        const critCount = findings.filter(f => f.severity === 'critical').length;
+        findingsAlert.className = 'risk-alert';
+        findingsAlert.style.borderColor = critCount ? 'var(--danger)' : 'var(--warning)';
+        findingsAlert.style.background = critCount ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+        findingsAlert.style.color = critCount ? '#f87171' : '#fbbf24';
+        findingsAlert.textContent = `⚠️ ${findings.length} confirmed finding(s) triaged by LLM (${critCount} critical blockers).`;
+
+        listFindings.innerHTML = findings.map(f => {
+          const sev = (f.severity || 'medium').toLowerCase();
+          const badgeColor = sev === 'critical' ? '#ef4444' : (sev === 'high' ? '#f97316' : (sev === 'medium' ? '#eab308' : '#3b82f6'));
+          const loc = `${f.file || 'global'}${f.line ? ':' + f.line : ''}`;
+          const cwe = f.cwe ? `<span style="background:#1f2937; padding:2px 6px; border-radius:4px; font-size:10px; margin-left:6px;">${f.cwe}</span>` : '';
+          return `
+            <div class="list-item" style="border-left: 3px solid ${badgeColor}; padding: 12px; background: #0f172a;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:700; color:#fff;">
+                  <span style="color:${badgeColor}; font-weight:800; text-transform:uppercase;">[${sev}]</span>
+                  ${f.rule_id || f.title || 'Security Finding'} ${cwe}
+                </span>
+                <span style="font-size:11px; color:var(--text-muted);">${f.source_tool || 'scanner'} &bull; ${loc}</span>
+              </div>
+              ${f.code_snippet ? `<pre style="margin-top:6px; font-size:11px; background:#020617; padding:6px; border-radius:4px; color:#fca5a5;">${f.code_snippet}</pre>` : ''}
+              <div style="margin-top:6px; font-size:12px; color:#cbd5e1;"><b>LLM Triage:</b> ${f.explanation || ''}</div>
+              ${f.fix_suggestion ? `<div style="margin-top:4px; font-size:12px; color:#38bdf8;"><b>Suggested Fix:</b> ${f.fix_suggestion}</div>` : ''}
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    async function searchCode() {
+      const query = document.getElementById('searchQuery').value.trim();
+      const repo_path = document.getElementById('localRepoPath').value.trim();
+      const resultsEl = document.getElementById('searchResults');
+      resultsEl.innerHTML = '<span style="color:var(--text-muted)">Searching...</span>';
+
+      try {
+        const res = await fetch('/api/indexer/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, repo_path })
+        });
+        const data = await res.json();
+        if (data.chunks && data.chunks.length) {
+          resultsEl.innerHTML = data.chunks.map(c => `
+            <div class="list-item">
+              <div style="font-weight:600; color:#fff;">${c.name} <span style="color:var(--primary); font-size:11px;">[Score: ${c.score}]</span></div>
+              <div style="font-size:11px; color:var(--text-muted);">${c.file} (lines ${c.start_line}-${c.end_line})</div>
+              <pre style="margin-top:4px; font-size:11px; color:#cbd5e1; background:#0d131f; padding:4px 6px; border-radius:4px;">${c.content}</pre>
+            </div>
+          `).join('');
+        } else {
+          resultsEl.innerHTML = '<span style="color:var(--text-muted)">No matching code chunks found.</span>';
+        }
+      } catch (err) {
+        resultsEl.innerHTML = `<span style="color:var(--danger)">Error: ${err.message}</span>`;
+      }
+    }
+
+    function switchTab(tabId) {
+      const tabs = ['impact', 'security', 'tests', 'diff', 'report'];
+      tabs.forEach(t => {
+        const pane = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
+        if (pane) pane.classList.remove('active');
+      });
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+      const activePane = document.getElementById('tab' + tabId.charAt(0).toUpperCase() + tabId.slice(1));
+      if (activePane) activePane.classList.add('active');
+      if (event && event.target) event.target.classList.add('active');
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadBranches();
+      const savedToken = localStorage.getItem('gh_pat');
+      if (savedToken) {
+        document.getElementById('ghToken').value = savedToken;
+      }
+    });
+  </script>
+</body>
+</html>

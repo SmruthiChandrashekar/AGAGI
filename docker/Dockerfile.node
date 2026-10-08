@@ -1,0 +1,23 @@
+# ==============================================================================
+# Base Node.js Sandbox Image for Agentic Reviewer
+# Used for JavaScript/TypeScript build tests and scanner execution
+# ==============================================================================
+FROM node:20-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install essential system build tools and git
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    build-essential \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install global testing and linting packages
+RUN npm install -g jest eslint typescript pnpm yarn
+
+WORKDIR /workspace
+
+USER node
+CMD ["/bin/sh"]
