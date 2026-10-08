@@ -1,0 +1,1 @@
+# Sandbox image for merge simulation (Week 3)\nFROM python:3.11-slim\nRUN apt-get update && apt-get install -y git build-essential && rm -rf /var/lib/apt/lists/*\nWORKDIR /sandbox\n
