@@ -293,6 +293,18 @@ def trigger_review(payload: ReviewRunRequest) -> dict[str, Any]:
                 (f.model_dump() if hasattr(f, "model_dump") else f)
                 for f in (result_state.get("findings") or [])
             ],
+            "review_findings": [
+                (f.model_dump() if hasattr(f, "model_dump") else f)
+                for f in (result_state.get("review_findings") or [])
+            ],
+            "root_causes": [
+                (rc.model_dump() if hasattr(rc, "model_dump") else rc)
+                for rc in (result_state.get("root_causes") or [])
+            ],
+            "patches": [
+                (p.model_dump() if hasattr(p, "model_dump") else p)
+                for p in (result_state.get("patches") or [])
+            ],
             "diff_preview": (result_state.get("diff") or "")[:5000],
             "test_results": result_state.get("test_results", {}),
             "report_markdown": result_state.get("report_markdown"),
@@ -390,6 +402,18 @@ def review_remote_pr(payload: GitHubPRReviewRequest) -> dict[str, Any]:
             "findings": [
                 (f.model_dump() if hasattr(f, "model_dump") else f)
                 for f in (result_state.get("findings") or [])
+            ],
+            "review_findings": [
+                (f.model_dump() if hasattr(f, "model_dump") else f)
+                for f in (result_state.get("review_findings") or [])
+            ],
+            "root_causes": [
+                (rc.model_dump() if hasattr(rc, "model_dump") else rc)
+                for rc in (result_state.get("root_causes") or [])
+            ],
+            "patches": [
+                (p.model_dump() if hasattr(p, "model_dump") else p)
+                for p in (result_state.get("patches") or [])
             ],
             "conflicted_files": result_state.get("conflicted_files", []),
             "conflict_hunks": result_state.get("conflict_hunks", []),

@@ -285,6 +285,26 @@ def average(nums):
     except subprocess.CalledProcessError:
         pass
 
+    # ── 6. unsafe-eval branch ───────────────────────────────────────────────
+    _run_git(["checkout", "-B", "unsafe-eval", "main"], cwd=repo_path)
+    unsafe_calc = (repo_path / "calc.py").read_text(encoding="utf-8") + "\n\ndef evaluate_expression(expr):\n    \"\"\"Evaluate custom math expression.\"\"\"\n    return eval(expr)\n"
+    (repo_path / "calc.py").write_text(unsafe_calc, encoding="utf-8")
+    _run_git(["add", "."], cwd=repo_path)
+    try:
+        _run_git(["commit", "-m", "feat: add evaluate_expression using eval"], cwd=repo_path)
+    except subprocess.CalledProcessError:
+        pass
+
+    # ── 7. hardcoded-secret branch ──────────────────────────────────────────
+    _run_git(["checkout", "-B", "hardcoded-secret", "main"], cwd=repo_path)
+    secret_calc = 'AWS_ACCESS_KEY = "AKIA1234567890ABCDEF"\n' + (repo_path / "calc.py").read_text(encoding="utf-8")
+    (repo_path / "calc.py").write_text(secret_calc, encoding="utf-8")
+    _run_git(["add", "."], cwd=repo_path)
+    try:
+        _run_git(["commit", "-m", "feat: configure cloud api credentials in calc.py"], cwd=repo_path)
+    except subprocess.CalledProcessError:
+        pass
+
     _run_git(["checkout", "main"], cwd=repo_path)
 
     return repo_path

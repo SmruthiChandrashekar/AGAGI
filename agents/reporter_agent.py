@@ -4,7 +4,8 @@ agents/reporter_agent.py
 Reporter Agent:
   - Aggregates changed files, blast radius, merge outcome, test regressions, and security findings
   - Groups triaged findings by severity with LLM explanations and suggested fixes
-  - Makes critical confirmed findings blockers in the review verdict
+  - Incorporates code review comments, root-cause analyses, and validated proposed patches
+  - Makes critical confirmed findings and unresolved regressions blockers in the review verdict
   - Generates comprehensive Markdown and JSON reports
 """
 
@@ -13,14 +14,14 @@ from __future__ import annotations
 from typing import Any
 
 from core.logging import get_logger
-from core.state import Finding, PipelineStage, ReviewState, ReviewVerdict, Severity
+from core.state import Finding, Patch, PipelineStage, ReviewState, ReviewVerdict, RootCause, Severity
 
 logger = get_logger(__name__)
 
 
 def run_reporter_agent(state: ReviewState) -> dict[str, Any]:
     """
-    Format findings and simulation results into a final report.
+    Format findings, simulation results, root causes, and patches into a final report.
     """
     logger.info("stage_start", stage="reporter_agent")
     cs = state.get("changeset")
@@ -29,6 +30,9 @@ def run_reporter_agent(state: ReviewState) -> dict[str, Any]:
     affected_files = state.get("affected_files", [])
     blast_radius = state.get("blast_radius_score", 0.0)
     findings = state.get("findings", state.get("all_findings", []))
+    review_findings = state.get("review_findings", [])
+    root_causes: list[RootCause] = state.get("root_causes", [])
+    patches: list[Patch] = state.get("patches", state.get("patch_proposals", []))
     conflicted_files = state.get("conflicted_files", [])
     test_results = state.get("test_results", {})
 
@@ -58,9 +62,12 @@ def run_reporter_agent(state: ReviewState) -> dict[str, Any]:
     elif merge_outcome in ("test failure", "tests failed") or bool(regressions):
         verdict = ReviewVerdict.NEEDS_CHANGES
         risk_score = 7.5
-    elif confirmed_high or confirmed_other:
+    elif confirmed_high or confirmed_other or bool(review_findings):
         verdict = ReviewVerdict.NEEDS_CHANGES
-        risk_score = min(8.5, round(4.0 + len(confirmed_high) * 1.5 + len(confirmed_other) * 0.5, 1))
+        risk_score = min(
+            8.5,
+            round(4.0 + len(confirmed_high) * 1.5 + len(confirmed_other) * 0.5 + len(review_findings) * 0.5, 1),
+        )
     else:
         verdict = ReviewVerdict.SAFE
         risk_score = round(min(3.0, blast_radius * 3.0), 1)
@@ -153,7 +160,7 @@ def run_reporter_agent(state: ReviewState) -> dict[str, Any]:
     else:
         report_lines.append("_No file modifications detected._")
 
-    # Security & Vulnerability Findings Section (grouped by severity)
+    # Security & Vulnerability Findings Section
     report_lines.extend([
         "",
         f"## 3. Security & Dependency Findings ({len(confirmed)} confirmed issues)",
@@ -162,7 +169,6 @@ def run_reporter_agent(state: ReviewState) -> dict[str, Any]:
     if not confirmed:
         report_lines.append("No security vulnerabilities or vulnerable dependencies detected in this pull request.")
     else:
-        # Group by severity
         groups: list[tuple[str, list[Finding]]] = [
             ("🚨 CRITICAL FINDINGS [MERGE BLOCKERS]", confirmed_critical),
             ("⚠️ HIGH SEVERITY FINDINGS", confirmed_high),
@@ -185,6 +191,44 @@ def run_reporter_agent(state: ReviewState) -> dict[str, Any]:
                 if f.fix_suggestion:
                     report_lines.append(f"- **Suggested Fix:** {f.fix_suggestion}")
 
+    # Code Review Comments Section (Week 5)
+    if review_findings:
+        report_lines.extend([
+            "",
+            f"## 4. Code Review Comments ({len(review_findings)})",
+        ])
+        for idx, rf in enumerate(review_findings, start=1):
+            report_lines.append(
+                f"{idx}. **[{rf.severity.upper()}]** `{rf.file}:{rf.line}` - {rf.explanation}"
+            )
+
+    # Root-Cause Analysis Section (Week 5)
+    if root_causes:
+        report_lines.extend([
+            "",
+            f"## 5. Root-Cause Analysis ({len(root_causes)} diagnosed issues)",
+        ])
+        for idx, rc in enumerate(root_causes, start=1):
+            loc = f"`{rc.root_cause_file}:{rc.root_cause_line or '?'}`"
+            report_lines.append(f"### Diagnosis #{idx} ({loc})")
+            report_lines.append(f"- **Root Cause:** {rc.explanation}")
+            if rc.related_tests:
+                report_lines.append(f"- **Triggered Failures:** {', '.join(rc.related_tests)}")
+
+    # Proposed Patches Section (Week 5)
+    if patches:
+        report_lines.extend([
+            "",
+            f"## 6. Proposed Fixes & Unified Diffs ({len(patches)} verified patches)",
+        ])
+        for idx, p in enumerate(patches, start=1):
+            target_str = ", ".join(p.target_files) if p.target_files else "designated files"
+            report_lines.append(f"### Patch #{idx}: Target `{target_str}`")
+            report_lines.append(f"- **Rationale:** {p.rationale}")
+            report_lines.append("```diff")
+            report_lines.append(p.unified_diff)
+            report_lines.append("```")
+
     report_markdown = "\n".join(report_lines)
 
     report_json: dict[str, Any] = {
@@ -201,6 +245,9 @@ def run_reporter_agent(state: ReviewState) -> dict[str, Any]:
         "critical_count": len(confirmed_critical),
         "high_count": len(confirmed_high),
         "findings": [f.model_dump() for f in confirmed],
+        "review_comments": [rf.model_dump() for rf in review_findings],
+        "root_causes": [rc.model_dump() for rc in root_causes],
+        "patches": [p.model_dump() for p in patches],
         "test_results": test_results,
     }
 

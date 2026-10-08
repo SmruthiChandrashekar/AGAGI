@@ -1,8 +1,8 @@
 """
 core/orchestrator.py
 --------------------
-LangGraph Review Pipeline:
-  ingest → impact → merge_simulation → [security || dependency] → triage → report
+LangGraph Review Pipeline (Week 5):
+  ingest → impact → merge_simulation → [security || dependency] → triage → review → rca → fix → report
 """
 
 from __future__ import annotations
@@ -12,9 +12,12 @@ from typing import Any
 from langgraph.graph import END, StateGraph
 
 from agents.dependency_agent import run_dependency_agent
+from agents.fix_agent import run_fix_agent
 from agents.impact_agent import run_impact_agent
 from agents.merge_sim_agent import run_merge_simulation_agent
+from agents.rca_agent import run_rca_agent
 from agents.reporter_agent import run_reporter_agent
+from agents.review_agent import run_review_agent
 from agents.security_agent import run_security_agent
 from agents.triage_agent import run_triage_agent
 from core.logging import get_logger
@@ -67,8 +70,23 @@ def node_triage(state: ReviewState) -> dict[str, Any]:
     return run_triage_agent(state)
 
 
+def node_review(state: ReviewState) -> dict[str, Any]:
+    """Code review step: Reviews changed functions for logic bugs and edge cases."""
+    return run_review_agent(state)
+
+
+def node_rca(state: ReviewState) -> dict[str, Any]:
+    """Root-cause analysis step: Diagnoses test regressions and confirmed vulnerabilities."""
+    return run_rca_agent(state)
+
+
+def node_fix(state: ReviewState) -> dict[str, Any]:
+    """Fix generator step: Proposes unified diffs and validates with git apply --check."""
+    return run_fix_agent(state)
+
+
 def node_report(state: ReviewState) -> dict[str, Any]:
-    """Report step: Synthesizes findings, regressions, verdict, and emits report."""
+    """Report step: Synthesizes findings, regressions, root causes, patches, and verdict."""
     return run_reporter_agent(state)
 
 
@@ -77,7 +95,8 @@ def node_report(state: ReviewState) -> dict[str, Any]:
 
 def build_graph() -> StateGraph:
     """
-    Build LangGraph review workflow with parallel Security and Dependency nodes.
+    Build LangGraph review workflow for Week 5:
+    ingest → impact → merge_simulation → [security || dependency] → triage → review → rca → fix → report
     """
     g = StateGraph(ReviewState)
 
@@ -87,6 +106,9 @@ def build_graph() -> StateGraph:
     g.add_node("security", node_security)
     g.add_node("dependency", node_dependency)
     g.add_node("triage", node_triage)
+    g.add_node("review", node_review)
+    g.add_node("rca", node_rca)
+    g.add_node("fix", node_fix)
     g.add_node("report", node_report)
 
     g.set_entry_point("ingest")
@@ -101,8 +123,11 @@ def build_graph() -> StateGraph:
     g.add_edge("security", "triage")
     g.add_edge("dependency", "triage")
 
-    # Triage feeds into report
-    g.add_edge("triage", "report")
+    # Linear Week 5 pipeline: triage → review → rca → fix → report
+    g.add_edge("triage", "review")
+    g.add_edge("review", "rca")
+    g.add_edge("rca", "fix")
+    g.add_edge("fix", "report")
     g.add_edge("report", END)
 
     return g

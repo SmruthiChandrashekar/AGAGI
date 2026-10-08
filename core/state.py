@@ -238,15 +238,20 @@ PatchProposal = Patch
 class RootCause(BaseModel):
     """Root-cause analysis outcome tracing findings back to code origin."""
 
+    id: str = Field(default_factory=lambda: f"RC-{uuid.uuid4().hex[:8].upper()}")
     finding_id: str | None = None
+    related_tests: list[str] = Field(default_factory=list)
     root_cause_file: str
     root_cause_line: int | None = None
     explanation: str
+    changed_lines: list[int] = Field(default_factory=list)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
 class TestCaseResult(BaseModel):
     """Structured result of an individual test case."""
+
+    __test__ = False
 
     name: str
     file: str = "unknown"
