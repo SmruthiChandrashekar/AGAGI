@@ -19,14 +19,18 @@ import os
 import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
 from core.logging import get_logger
 from core.state import PipelineStage, ReviewState, SimulationResult, TestCaseResult
 from tools.docker_runner import is_docker_available, run_in_sandbox
-from tools.git_ops import cleanup_worktree, create_worktree, simulate_merge
+from tools.git_ops import (
+    cleanup_worktree,
+    create_merged_worktree,
+    create_worktree,
+    simulate_merge,
+)
 from tools.junit_parser import parse_junit_xml
 from tools.project_detector import detect_project
 
@@ -243,7 +247,12 @@ def run_merge_simulation_agent(state: ReviewState) -> dict[str, Any]:
     # ── Stage 3: Merged Run in Sandbox Worktree ───────────────────────────────
     merged_wt: Path | None = None
     try:
-        merged_wt = create_worktree(cs.repo_path, cs.head_ref)
+        # Test the code as it would look after merging (base + head), not head alone.
+        try:
+            merged_wt = create_merged_worktree(cs.repo_path, cs.base_ref, cs.head_ref)
+        except Exception as merge_exc:
+            logger.info("merged_worktree_unavailable_using_head", error=str(merge_exc)[:200])
+            merged_wt = create_worktree(cs.repo_path, cs.head_ref)
         m_code, m_out, m_err, m_timeout, m_cases = _run_test_suite_in_sandbox(
             merged_wt, timeout_seconds=45, xml_name=".merged_junit.xml"
         )

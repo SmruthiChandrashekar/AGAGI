@@ -17,6 +17,11 @@ import subprocess
 from pathlib import Path
 
 
+def default_demo_path() -> Path:
+    """A 'calculator' folder next to the project folder, e.g. projects/AGAGI -> projects/calculator."""
+    return Path(__file__).resolve().parents[2] / "calculator"
+
+
 def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git"] + args,
@@ -315,8 +320,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--target",
         "-t",
-        default=r"C:\Users\LENOVO\Desktop\calculator",
-        help="Path where calc-demo repo should be built",
+        default=str(default_demo_path()),
+        help="Path where calc-demo repo should be built (default: a 'calculator' folder next to this project)",
     )
     args = parser.parse_args()
     path = build_calc_demo(args.target)

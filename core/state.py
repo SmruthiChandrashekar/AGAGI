@@ -471,6 +471,10 @@ class ReviewState(TypedDict, total=False):
 
     # Verification (post-patch)
     verification_result: SimulationResult | None
+    verifier_output: VerifierOutput | None  # Week 6: outcome of applying approved patches
+    verification_feedback: str | None  # Week 6: why the last fix failed, fed back to RCA/fix
+    verification_history: list[dict[str, Any]]  # Week 6: one entry per verify attempt
+    escalated: bool  # Week 6: retry limit reached, handed back to a human
 
     # Final outputs
     verdict: ReviewVerdict | None
@@ -524,6 +528,10 @@ def make_initial_state(changeset: ChangeSet, require_approval: bool = False) -> 
         approval_decision=None,
         approved_patches=[],
         verification_result=None,
+        verifier_output=None,
+        verification_feedback=None,
+        verification_history=[],
+        escalated=False,
         verdict=None,
         risk_score=None,
         report_markdown=None,

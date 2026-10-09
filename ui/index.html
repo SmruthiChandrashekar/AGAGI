@@ -472,6 +472,9 @@
       <button class="btn-mode" id="modeBtnGithub" onclick="setMode('github')">
         🐙 GitHub Account & Pull Requests
       </button>
+      <a class="btn-mode" href="/approve" style="text-decoration:none;" title="Run a review that pauses for your approval, then verifies the fix">
+        ✅ Patch Approval
+      </a>
     </div>
 
     <!-- Controls Row -->
@@ -485,9 +488,9 @@
 
         <div class="form-group">
           <label class="form-label" for="localRepoPath">Repository Path</label>
-          <input type="text" id="localRepoPath" class="form-input" value="C:\Users\LENOVO\Desktop\calculator" onchange="loadBranches()" />
+          <input type="text" id="localRepoPath" class="form-input" value="" placeholder="C:\path\to\repo" onchange="loadBranches()" />
           <div class="presets-row">
-            <button class="btn-preset" onclick="setPreset('C:\\Users\\LENOVO\\Desktop\\calculator')">Calculator Demo</button>
+            <button class="btn-preset" onclick="setPreset(window.DEMO_REPO_PATH || '')">Calculator Demo</button>
             <button class="btn-preset" onclick="setPreset('.')">Current Repo (.)</button>
           </div>
         </div>
@@ -1166,7 +1169,13 @@
       if (event && event.target) event.target.classList.add('active');
     }
 
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const st = await (await fetch('/api/status')).json();
+        window.DEMO_REPO_PATH = st.demo_repo_path || '';
+        const input = document.getElementById('localRepoPath');
+        if (!input.value && window.DEMO_REPO_PATH) input.value = window.DEMO_REPO_PATH;
+      } catch (e) { /* status is optional */ }
       loadBranches();
       const savedToken = localStorage.getItem('gh_pat');
       if (savedToken) {

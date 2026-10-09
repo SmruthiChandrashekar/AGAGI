@@ -5,39 +5,80 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Patch Approval</title>
 <style>
-  :root { --bg:#0d1117; --panel:#161b22; --text:#e6edf3; --muted:#8b949e; --accent:#3fb950; --danger:#f85149; --border:#30363d; }
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #0b0f14; --text: #e6edf3; --muted: #8b949e;
+    --accent: #3fb950; --danger: #f85149; --warn: #d29922; --border: #30363d; --link: #58a6ff;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0 auto; max-width: 960px; padding: 24px 16px; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
+  body { margin: 0 auto; max-width: 980px; padding: 24px 16px 64px; background: var(--bg); color: var(--text);
+         font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.45; }
+  a { color: var(--link); }
   h1 { font-size: 22px; margin: 0 0 4px; }
-  label { display: block; font-size: 13px; color: var(--muted); margin-top: 10px; }
-  input[type=text] { width: 100%; padding: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
-  button { margin: 14px 8px 0 0; padding: 9px 16px; border: 0; border-radius: 6px; font-weight: 600; cursor: pointer; }
-  button:disabled { opacity: .5; cursor: wait; }
-  .go { background: var(--accent); color: #000; }
-  .no { background: var(--danger); color: #fff; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 14px; }
-  .card label { color: var(--text); font-size: 15px; font-weight: 600; margin: 0; }
-  pre { background: #010409; padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
   .muted { color: var(--muted); font-size: 13px; }
-  #status { margin-top: 16px; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+  label { display: block; font-size: 13px; color: var(--muted); margin-top: 12px; }
+  input[type=text] { width: 100%; padding: 8px 10px; background: var(--panel); color: var(--text);
+                     border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+  button { margin: 14px 8px 0 0; padding: 9px 16px; border: 0; border-radius: 6px; font-weight: 600;
+           cursor: pointer; font-size: 14px; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .go { background: var(--accent); color: #04130a; }
+  .no { background: var(--danger); color: #fff; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-top: 14px; }
+  .card h2 { font-size: 16px; margin: 0 0 8px; }
+  .patch label { color: var(--text); font-size: 15px; font-weight: 600; margin: 0; cursor: pointer; }
+  pre { background: var(--panel-2); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; margin: 8px 0 0; }
+  .add { color: #56d364; } .del { color: #f85149; } .hunk { color: #79c0ff; }
+  .banner { border-radius: 8px; padding: 10px 14px; margin-top: 14px; font-size: 14px; }
+  .banner.warn { background: rgba(210,153,34,.12); border: 1px solid rgba(210,153,34,.5); }
+  .banner.bad  { background: rgba(248,81,73,.10); border: 1px solid rgba(248,81,73,.5); }
+  .banner.good { background: rgba(63,185,80,.10); border: 1px solid rgba(63,185,80,.5); }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600;
+          border: 1px solid var(--border); margin-left: 6px; }
+  #status { margin-top: 16px; font-weight: 600; min-height: 1.4em; }
+  ul.attempts { margin: 6px 0 0; padding-left: 20px; }
+  ul.attempts li { margin: 4px 0; }
+  details summary { cursor: pointer; color: var(--muted); margin-top: 8px; }
 </style>
 </head>
 <body>
   <h1>Patch Approval</h1>
-  <p class="muted">Runs the review in approval mode. Nothing is applied unless you approve it.</p>
+  <p class="muted">
+    Runs the review, then pauses so you can approve or reject each proposed fix. Approved fixes are applied to a
+    throwaway copy of the merged code and fully re-tested. Your own files are never changed.
+    <a href="/">Back to dashboard</a>
+  </p>
 
-  <label for="repo">Repository path</label>
-  <input type="text" id="repo" placeholder="C:\path\to\repo">
-  <label for="base">Base ref</label>
-  <input type="text" id="base" value="main">
-  <label for="head">Head ref</label>
-  <input type="text" id="head" value="breaks-test">
-  <label for="who">Your name (recorded as approver)</label>
-  <input type="text" id="who" placeholder="sarthak">
+  <div id="llmBanner" class="banner warn" hidden>
+    No AI key is configured, so root causes come from simple built-in rules and no fixes can be written.
+    Put <code>GEMINI_API_KEY=...</code> in <code>.env</code>, restart the server, and run
+    <code>python -m tools.check_llm</code> to confirm it works.
+  </div>
+
+  <div class="grid">
+    <div>
+      <label for="repo">Repository path</label>
+      <input type="text" id="repo" placeholder="C:\path\to\repo">
+    </div>
+    <div>
+      <label for="who">Your name (recorded as approver)</label>
+      <input type="text" id="who" placeholder="sarthak">
+    </div>
+    <div>
+      <label for="base">Base ref</label>
+      <input type="text" id="base" value="main">
+    </div>
+    <div>
+      <label for="head">Head ref</label>
+      <input type="text" id="head" value="breaks-test">
+    </div>
+  </div>
 
   <button class="go" id="run">Run review (approval mode)</button>
 
-  <div id="status"></div>
+  <div id="status" role="status"></div>
+  <div id="previous"></div>
   <div id="patches"></div>
   <div id="actions" hidden>
     <button class="go" id="approve">Approve selected</button>
@@ -50,6 +91,9 @@
   const $ = (id) => document.getElementById(id);
   const setStatus = (t) => { $("status").textContent = t; };
 
+  function load(key, fallback) { try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; } }
+  function save(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* storage unavailable */ } }
+
   async function post(url, body) {
     const r = await fetch(url, {
       method: "POST",
@@ -61,30 +105,49 @@
     return data;
   }
 
-  function renderPatches(patches) {
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function renderDiff(diffText) {
+    const pre = el("pre");
+    (diffText || "").split("\n").forEach((line) => {
+      let cls = "";
+      if (line.startsWith("+") && !line.startsWith("+++")) cls = "add";
+      else if (line.startsWith("-") && !line.startsWith("---")) cls = "del";
+      else if (line.startsWith("@@")) cls = "hunk";
+      pre.append(el("span", cls, line + "\n"));
+    });
+    return pre;
+  }
+
+  function renderPending(pending) {
+    const prev = $("previous");
+    prev.innerHTML = "";
+    if (pending.previous_failure) {
+      const box = el("div", "banner bad");
+      box.append(el("strong", "", `Attempt ${pending.attempt - 1} failed verification. `));
+      box.append(document.createTextNode("Here is a new fix. Why the last one failed:"));
+      box.append(el("pre", "", pending.previous_failure));
+      prev.append(box);
+    }
+
     const box = $("patches");
     box.innerHTML = "";
-    patches.forEach((p) => {
-      const card = document.createElement("div");
-      card.className = "card";
-
-      const label = document.createElement("label");
-      const cb = document.createElement("input");
+    (pending.patches || []).forEach((p) => {
+      const card = el("div", "card patch");
+      const label = el("label");
+      const cb = el("input");
       cb.type = "checkbox";
       cb.className = "pick";
       cb.value = p.index;
       cb.style.marginRight = "8px";
       const files = (p.target_files || []).join(", ") || "unknown file";
-      label.append(cb, `Patch ${p.index}: ${files}`);
-
-      const why = document.createElement("p");
-      why.className = "muted";
-      why.textContent = p.rationale || "";
-
-      const diff = document.createElement("pre");
-      diff.textContent = p.unified_diff || "";
-
-      card.append(label, why, diff);
+      label.append(cb, `Patch ${p.index + 1}: ${files}`);
+      card.append(label, el("p", "muted", p.rationale || ""), renderDiff(p.unified_diff));
       box.append(card);
     });
   }
@@ -92,43 +155,87 @@
   function renderResult(d) {
     const box = $("result");
     box.innerHTML = "";
-    const card = document.createElement("div");
-    card.className = "card";
+    const vo = d.verifier_output;
+    const history = d.verification_history || [];
 
-    const summary = document.createElement("p");
-    summary.textContent =
-      `Verdict: ${d.verdict ?? "n/a"} · Approval: ${d.approval_status ?? "n/a"} · ` +
-      `Approved patches: ${(d.approved_patches || []).length}`;
+    if (d.escalated) {
+      box.append(el("div", "banner bad",
+        `Escalated: no fix passed verification after ${history.length} attempt(s). This needs a human fix.`));
+    } else if (vo && vo.verified) {
+      box.append(el("div", "banner good", "Verified: " + vo.summary));
+    } else if (history.length) {
+      box.append(el("div", "banner bad", (vo && vo.summary) || "Verification failed."));
+    }
 
-    const report = document.createElement("pre");
+    const card = el("div", "card");
+    card.append(el("h2", "", "Result"));
+    const summary = el("p");
+    summary.append(document.createTextNode("Verdict "));
+    summary.append(el("span", "pill", (d.verdict || "n/a").toUpperCase()));
+    summary.append(document.createTextNode("  Approval "));
+    summary.append(el("span", "pill", (d.approval_status || "n/a").toUpperCase()));
+    summary.append(document.createTextNode("  Approved patches "));
+    summary.append(el("span", "pill", String((d.approved_patches || []).length)));
+    card.append(summary);
+
+    if (history.length) {
+      const ul = el("ul", "attempts");
+      history.forEach((h) => ul.append(el("li", "", `${h.verified ? "✅" : "❌"} Attempt ${h.attempt}: ${h.summary}`)));
+      card.append(ul);
+    }
+
+    const det = el("details");
+    det.append(el("summary", "", "Full report"));
+    const report = el("pre", "", d.report_markdown || "(no report)");
     report.style.whiteSpace = "pre-wrap";
-    report.textContent = d.report_markdown || "(no report)";
+    det.append(report);
+    card.append(det);
 
-    card.append(summary, report);
+    if (d.thread_id) {
+      const a = el("a", "", "Audit trail for this review");
+      a.href = `/api/review/${d.thread_id}/audit`;
+      a.target = "_blank";
+      const p = el("p", "muted");
+      p.append(a);
+      card.append(p);
+    }
     box.append(card);
+  }
+
+  function showRun(data) {
+    threadId = data.thread_id;
+    if (data.paused && data.pending_approval) {
+      renderPending(data.pending_approval);
+      $("result").innerHTML = "";
+      $("actions").hidden = false;
+      const a = data.pending_approval;
+      setStatus(`Paused (attempt ${a.attempt} of ${a.max_attempts}): tick the patches you approve, then choose below.`);
+    } else {
+      $("previous").innerHTML = "";
+      $("patches").innerHTML = "";
+      $("actions").hidden = true;
+      setStatus(data.verification_history && data.verification_history.length
+        ? "Finished."
+        : "Finished. No patches needed approval.");
+      renderResult(data);
+    }
   }
 
   $("run").onclick = async () => {
     $("run").disabled = true;
+    $("previous").innerHTML = "";
     $("patches").innerHTML = "";
     $("result").innerHTML = "";
     $("actions").hidden = true;
+    save("approve_repo", $("repo").value);
+    save("approve_who", $("who").value);
     setStatus("Running review... this can take a few minutes.");
     try {
-      const data = await post("/api/review/start", {
+      showRun(await post("/api/review/start", {
         repo_path: $("repo").value,
         base_ref: $("base").value,
         head_ref: $("head").value,
-      });
-      threadId = data.thread_id;
-      if (data.paused && data.pending_approval) {
-        renderPatches(data.pending_approval.patches || []);
-        $("actions").hidden = false;
-        setStatus("Paused: tick the patches you approve, then choose below.");
-      } else {
-        setStatus("Finished. No patches needed approval.");
-        renderResult(data);
-      }
+      }));
     } catch (e) {
       setStatus("Error: " + e.message);
     } finally {
@@ -143,16 +250,13 @@
       return;
     }
     $("approve").disabled = $("reject").disabled = true;
-    setStatus("Resuming pipeline...");
+    setStatus(approve ? "Applying to a throwaway copy and re-running tests and scanners..." : "Recording rejection...");
     try {
-      const data = await post(`/api/review/${threadId}/decision`, {
+      showRun(await post(`/api/review/${threadId}/decision`, {
         approve,
         approved_patch_indices: approve ? picked : [],
         reviewed_by: $("who").value || null,
-      });
-      $("actions").hidden = true;
-      setStatus(`Decision recorded: ${data.approval_status}`);
-      renderResult(data);
+      }));
     } catch (e) {
       setStatus("Error: " + e.message);
     } finally {
@@ -162,6 +266,17 @@
 
   $("approve").onclick = () => decide(true);
   $("reject").onclick = () => decide(false);
+
+  (async () => {
+    $("who").value = load("approve_who", "");
+    try {
+      const st = await (await fetch("/api/status")).json();
+      $("repo").value = load("approve_repo", st.demo_repo_path || "");
+      $("llmBanner").hidden = !!st.llm_ready;
+    } catch (e) {
+      $("repo").value = load("approve_repo", "");
+    }
+  })();
 </script>
 </body>
 </html>

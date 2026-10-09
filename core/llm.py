@@ -210,6 +210,21 @@ _RETRY_EXCEPTIONS = (
 )
 
 
+def _has_real_key(value: str) -> bool:
+    """True when an API key is set and is not the template placeholder."""
+    v = (value or "").strip()
+    return bool(v) and not v.lower().startswith("your_")
+
+
+def provider_available(model: str) -> bool:
+    """Skip hosted providers whose API key is missing, so calls don't waste time failing."""
+    if model.startswith("gemini/"):
+        return _has_real_key(settings.gemini_api_key)
+    if model.startswith("groq/"):
+        return _has_real_key(settings.groq_api_key)
+    return True
+
+
 def _prepare_call_kwargs(model: str, kwargs: dict[str, Any]) -> dict[str, Any]:
     """Inject required credentials/endpoints depending on provider."""
     call_kwargs = dict(kwargs)
@@ -267,6 +282,9 @@ def chat(
     last_error: Exception | None = None
 
     for model in models:
+        if not provider_available(model):
+            logger.debug("llm_provider_skipped_no_key", model=model)
+            continue
         prompt_hash = llm_cache.compute_hash(model, messages, temperature)
         if use_cache:
             cached = llm_cache.get(prompt_hash)
@@ -446,11 +464,11 @@ def smoke_test_providers() -> dict[str, dict[str, Any]]:
     providers = {
         "gemini": {
             "model": settings.primary_model,
-            "has_key": bool(settings.gemini_api_key),
+            "has_key": _has_real_key(settings.gemini_api_key),
         },
         "groq": {
             "model": settings.fast_model,
-            "has_key": bool(settings.groq_api_key),
+            "has_key": _has_real_key(settings.groq_api_key),
         },
         "ollama": {
             "model": settings.fallback_model,

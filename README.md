@@ -40,6 +40,14 @@ Open `.env` and add your free LLM API key(s):
 - `GEMINI_API_KEY` ([Get free key at Google AI Studio](https://aistudio.google.com/apikey))
 - `GROQ_API_KEY` ([Get free key at Groq Console](https://console.groq.com/keys))
 
+Then check the key and model names actually work:
+```bash
+python -m tools.check_llm
+```
+If no provider shows `[OK]`, the agents fall back to simple built-in rules: root causes are weaker and no fixes can be written. Retired model names from old `.env` files (for example `gemini-1.5-flash-latest`, `llama3-8b-8192`) are upgraded automatically.
+
+> Never put a real key in `.env.example`. It is committed to the repo; `.env` is not.
+
 ---
 
 ## 🖥️ Running the Web Dashboard
@@ -64,12 +72,30 @@ You can generate the complete multi-branch calculator testbed repository in one 
 ```bash
 python tools/build_calc_demo.py
 ```
-This builds `C:\Users\<user>\Desktop\calculator` (or `./calculator`) with all 5 test branches:
+This builds a `calculator` folder next to the project folder (pass `--target <path>` to choose another place) with these test branches:
 - `clean-merge`: Clean addition of `multiply()` function (verdict: **SAFE**).
 - `breaks-test`: Modifies `average(nums)` signature, merges cleanly but introduces test regressions (verdict: **NEEDS_CHANGES**).
 - `conflict`: Modifies same lines on `main` and branch (verdict: **BLOCKED**).
 - `build-error`: Introduces a Python syntax error (verdict: **NEEDS_CHANGES**).
+- `unsafe-eval`: Adds a function that calls `eval()` (security finding).
+- `hardcoded-secret`: Adds a hardcoded AWS-style key (security finding).
 - `main`: Baseline branch with isolated baseline tests.
+
+---
+
+## ✅ Week 6: Human Approval, Verification & Retry Loop
+
+Open **[http://127.0.0.1:8080/approve](http://127.0.0.1:8080/approve)** (or click **Patch Approval** on the dashboard).
+
+1. The review runs and **pauses** whenever fixes are proposed. Nothing is applied without your approval.
+2. Tick the patches you approve, then **Approve selected** (or **Reject all**).
+3. The **Verifier** applies only the approved patches to a throwaway copy of the merged code (base + branch), then re-runs the full test suite and the security scanners. Your own files are never changed.
+4. If the fix fails verification, the failure is fed back to root-cause analysis and a new fix is proposed for approval, up to `MAX_FIX_ITERATIONS` attempts (default 3). After that the review is **escalated** to a human.
+5. Every approval, rejection, verification and escalation is recorded in `data/audit.db` (view one run at `/api/review/<thread_id>/audit`).
+
+The main dashboard's **Run Review** never pauses and never applies anything; it behaves exactly as in Week 5.
+
+Paused reviews are kept in memory, so restarting the server forgets any review that is waiting for approval.
 
 ---
 

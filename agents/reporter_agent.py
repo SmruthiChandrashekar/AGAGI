@@ -14,7 +14,15 @@ from __future__ import annotations
 from typing import Any
 
 from core.logging import get_logger
-from core.state import Finding, Patch, PipelineStage, ReviewState, ReviewVerdict, RootCause, Severity
+from core.state import (
+    Finding,
+    Patch,
+    PipelineStage,
+    ReviewState,
+    ReviewVerdict,
+    RootCause,
+    Severity,
+)
 
 logger = get_logger(__name__)
 
@@ -71,6 +79,16 @@ def run_reporter_agent(state: ReviewState) -> dict[str, Any]:
     else:
         verdict = ReviewVerdict.SAFE
         risk_score = round(min(3.0, blast_radius * 3.0), 1)
+
+    # Week 6: approval / verification outcome
+    escalated = bool(state.get("escalated"))
+    verifier_output = state.get("verifier_output")
+    verification_history: list[dict[str, Any]] = state.get("verification_history") or []
+    approval_status = state.get("approval_status")
+    approval_decision = state.get("approval_decision")
+    approved_patches: list[Patch] = state.get("approved_patches") or []
+    if escalated:
+        verdict = ReviewVerdict.ESCALATED
 
     # ── Format Markdown Report ───────────────────────────────────────────────
     status_badges = {
@@ -212,6 +230,11 @@ def run_reporter_agent(state: ReviewState) -> dict[str, Any]:
             loc = f"`{rc.root_cause_file}:{rc.root_cause_line or '?'}`"
             report_lines.append(f"### Diagnosis #{idx} ({loc})")
             report_lines.append(f"- **Root Cause:** {rc.explanation}")
+            if rc.confidence < 1.0:
+                report_lines.append(
+                    "- _Diagnosed by built-in rules because the AI was unavailable "
+                    "(run `python -m tools.check_llm`)._"
+                )
             if rc.related_tests:
                 report_lines.append(f"- **Triggered Failures:** {', '.join(rc.related_tests)}")
 
@@ -219,7 +242,7 @@ def run_reporter_agent(state: ReviewState) -> dict[str, Any]:
     if patches:
         report_lines.extend([
             "",
-            f"## 6. Proposed Fixes & Unified Diffs ({len(patches)} verified patches)",
+            f"## 6. Proposed Fixes & Unified Diffs ({len(patches)} patch(es) that apply cleanly)",
         ])
         for idx, p in enumerate(patches, start=1):
             target_str = ", ".join(p.target_files) if p.target_files else "designated files"
@@ -228,6 +251,37 @@ def run_reporter_agent(state: ReviewState) -> dict[str, Any]:
             report_lines.append("```diff")
             report_lines.append(p.unified_diff)
             report_lines.append("```")
+
+    # Human Approval & Verification Section (Week 6)
+    if state.get("require_approval") or verification_history or escalated:
+        report_lines.extend(["", "## 7. Human Approval & Verification"])
+        status_text = str(approval_status.value if hasattr(approval_status, "value") else approval_status)
+        who = getattr(approval_decision, "reviewed_by", None) if approval_decision else None
+        report_lines.append(
+            f"- **Approval:** `{(status_text or 'pending').upper()}`" + (f" by `{who}`" if who else "")
+        )
+        if approved_patches:
+            files = sorted({f for p in approved_patches for f in p.target_files})
+            report_lines.append(f"- **Approved patches:** {len(approved_patches)} ({', '.join(files)})")
+        for h in verification_history:
+            icon = "✅" if h.get("verified") else "❌"
+            report_lines.append(f"- {icon} **Attempt {h.get('attempt')}:** {h.get('summary')}")
+            for t in h.get("failing_tests") or []:
+                report_lines.append(f"  - still failing: `{t}`")
+            for f in h.get("new_findings") or []:
+                report_lines.append(f"  - new finding: `{f}`")
+            for f in h.get("unresolved_findings") or []:
+                report_lines.append(f"  - not fixed: `{f}`")
+        if verifier_output is not None and getattr(verifier_output, "verified", False):
+            report_lines.append(
+                "- **Result:** The approved fix is verified on a copy of the merged code. "
+                "Apply it to the branch to resolve this review. Your files were not changed."
+            )
+        if escalated:
+            report_lines.append(
+                f"- **Escalated:** No verified fix after {len(verification_history)} attempt(s). "
+                "A human needs to fix this manually."
+            )
 
     report_markdown = "\n".join(report_lines)
 
@@ -249,6 +303,11 @@ def run_reporter_agent(state: ReviewState) -> dict[str, Any]:
         "root_causes": [rc.model_dump() for rc in root_causes],
         "patches": [p.model_dump() for p in patches],
         "test_results": test_results,
+        "approval_status": str(approval_status.value if hasattr(approval_status, "value") else approval_status),
+        "approved_patches": [p.model_dump(mode="json") for p in approved_patches],
+        "verification": verifier_output.model_dump() if verifier_output is not None else None,
+        "verification_history": verification_history,
+        "escalated": escalated,
     }
 
     logger.info("reporter_agent_complete", verdict=verdict.value, risk_score=risk_score)

@@ -274,3 +274,95 @@ def simulate_merge(
 
     finally:
         cleanup_worktree(repo, wt_dir)
+
+
+# ── Merged Workspaces (Week 6) ────────────────────────────────────────────────
+#
+# Agents must look at the code that would exist AFTER the merge, not at whatever
+# branch the user's own folder currently has checked out. These helpers build a
+# throwaway worktree of base_ref with head_ref merged in.
+
+_MERGE_IDENTITY = [
+    "-c",
+    "user.name=Agentic Reviewer",
+    "-c",
+    "user.email=agentic-reviewer@localhost",
+]
+
+
+def create_merged_worktree(repo_path: Path | str, base_ref: str, head_ref: str) -> Path:
+    """
+    Create a temporary worktree at base_ref with head_ref merged in (merge committed).
+    Raises RuntimeError if the merge does not apply cleanly; nothing is left behind.
+    """
+    repo = Path(repo_path).resolve()
+    wt = create_worktree(repo, base_ref)
+    res = _run_git(
+        [*_MERGE_IDENTITY, "merge", "--no-ff", "--no-edit", head_ref],
+        cwd=wt,
+        check=False,
+    )
+    if res.returncode != 0:
+        _run_git(["merge", "--abort"], cwd=wt, check=False)
+        cleanup_worktree(repo, wt)
+        err = (res.stderr or res.stdout or "").strip()
+        raise RuntimeError(f"Merging {head_ref} into {base_ref} failed: {err[:500]}")
+    logger.debug("merged_worktree_created", path=str(wt), base=base_ref, head=head_ref)
+    return wt
+
+
+@contextlib.contextmanager
+def review_workspace(
+    repo_path: Path | str,
+    base_ref: str,
+    head_ref: str,
+) -> Generator[Path, None, None]:
+    """
+    Yield a directory holding the code under review, cleaned up afterwards.
+
+    Preference order:
+      1. base_ref with head_ref merged in (what would land after merging)
+      2. head_ref alone (when the merge conflicts)
+      3. the repository folder itself (last resort, never deleted)
+    """
+    repo = Path(repo_path).resolve()
+    wt: Path | None = None
+    try:
+        try:
+            wt = create_merged_worktree(repo, base_ref, head_ref)
+        except Exception as exc:
+            logger.info("review_workspace_merge_unavailable", error=str(exc)[:200])
+            try:
+                wt = create_worktree(repo, head_ref)
+            except Exception as exc2:
+                logger.warning("review_workspace_fallback_to_repo", error=str(exc2)[:200])
+                wt = None
+        yield wt if wt is not None else repo
+    finally:
+        if wt is not None:
+            cleanup_worktree(repo, wt)
+
+
+def apply_patch(worktree: Path | str, unified_diff: str, check_only: bool = False) -> tuple[bool, str]:
+    """
+    Apply (or with check_only, just test) a unified diff inside a worktree.
+    Uses --recount because model-written hunk headers often miscount lines.
+    Returns (ok, error_message).
+    """
+    text = unified_diff if unified_diff.endswith("\n") else unified_diff + "\n"
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".patch", delete=False, encoding="utf-8", newline="\n"
+    ) as tmp:
+        tmp.write(text)
+        patch_file = Path(tmp.name)
+    try:
+        args = ["apply", "--recount", "--ignore-whitespace", "--whitespace=nowarn"]
+        if check_only:
+            args.append("--check")
+        res = _run_git([*args, str(patch_file)], cwd=worktree, check=False)
+        if res.returncode == 0:
+            return True, ""
+        return False, (res.stderr or res.stdout or "git apply failed").strip()
+    finally:
+        with contextlib.suppress(Exception):
+            patch_file.unlink(missing_ok=True)

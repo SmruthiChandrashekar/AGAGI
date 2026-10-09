@@ -12,6 +12,7 @@ LLM Triage Agent:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ from pydantic import BaseModel, Field
 from core.llm import chat_structured
 from core.logging import get_logger
 from core.state import Finding, ReviewState, Severity
+from tools.git_ops import review_workspace
 
 logger = get_logger(__name__)
 
@@ -175,25 +177,31 @@ def run_triage_agent(state: ReviewState) -> dict[str, Any]:
     confirmed_findings: list[Finding] = []
     triaged_all: list[Finding] = []
 
-    for finding in top_findings:
-        try:
-            triage_res = triage_single_finding(repo_dir, finding)
-            if triage_res.is_real:
-                finding.severity = triage_res.severity
-                finding.explanation = triage_res.explanation
-                finding.fix_suggestion = triage_res.suggested_fix
-                finding.is_false_positive = False
-                confirmed_findings.append(finding)
-            else:
-                finding.is_false_positive = True
-                finding.explanation = f"[False Positive]: {triage_res.explanation}"
+    # Read code context from the merged code (base + head), not the user's checkout.
+    workspace = (
+        review_workspace(cs.repo_path, cs.base_ref, cs.head_ref) if cs else contextlib.nullcontext(repo_dir)
+    )
+    with workspace as ws_dir:
+        repo_dir = Path(ws_dir).resolve()
+        for finding in top_findings:
+            try:
+                triage_res = triage_single_finding(repo_dir, finding)
+                if triage_res.is_real:
+                    finding.severity = triage_res.severity
+                    finding.explanation = triage_res.explanation
+                    finding.fix_suggestion = triage_res.suggested_fix
+                    finding.is_false_positive = False
+                    confirmed_findings.append(finding)
+                else:
+                    finding.is_false_positive = True
+                    finding.explanation = f"[False Positive]: {triage_res.explanation}"
 
-            triaged_all.append(finding)
-        except Exception as exc:
-            logger.warning("triage_llm_failed_fallback", finding_id=finding.id, error=str(exc))
-            # On LLM failure (e.g. offline / mock), retain finding as-is
-            confirmed_findings.append(finding)
-            triaged_all.append(finding)
+                triaged_all.append(finding)
+            except Exception as exc:
+                logger.warning("triage_llm_failed_fallback", finding_id=finding.id, error=str(exc))
+                # On LLM failure (e.g. offline / mock), retain finding as-is
+                confirmed_findings.append(finding)
+                triaged_all.append(finding)
 
     logger.info(
         "triage_agent_complete",

@@ -17,6 +17,7 @@ from core.logging import get_logger
 from core.state import Finding, ReviewState
 from tools.bandit_runner import run_bandit
 from tools.deduplicator import deduplicate_findings
+from tools.git_ops import review_workspace
 from tools.gitleaks_runner import run_gitleaks
 from tools.project_detector import detect_project
 from tools.semgrep_runner import run_semgrep
@@ -36,8 +37,15 @@ def run_security_agent(state: ReviewState) -> dict[str, Any]:
         logger.warning("security_agent_missing_changeset")
         return {"security_findings": []}
 
-    repo_dir = Path(cs.repo_path).resolve()
     affected_files = state.get("affected_files", [])
+
+    # Scan the merged code (base + head), not whatever the user's folder has checked out.
+    with review_workspace(cs.repo_path, cs.base_ref, cs.head_ref) as workspace:
+        return _scan_changed_files(Path(workspace).resolve(), affected_files)
+
+
+def _scan_changed_files(repo_dir: Path, affected_files: list[str]) -> dict[str, Any]:
+    """Run all scanners over the changed files inside repo_dir."""
 
     # Filter to existing files in the repo
     target_files: list[str] = []

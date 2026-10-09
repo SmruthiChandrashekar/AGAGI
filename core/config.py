@@ -1,4 +1,4 @@
-﻿"""
+"""
 core/config.py
 --------------
 Centralised configuration loaded from environment variables / .env file.
@@ -29,6 +29,23 @@ class LogLevel(StrEnum):
     CRITICAL = "CRITICAL"
 
 
+# Model names the providers have shut down, mapped to current replacements.
+# Older .env files copied from the template still contain the retired names,
+# and every call to them fails, so they are upgraded automatically.
+RETIRED_MODEL_REPLACEMENTS: dict[str, str] = {
+    "gemini/gemini-1.5-flash-latest": "gemini/gemini-3.5-flash",
+    "gemini/gemini-1.5-flash": "gemini/gemini-3.5-flash",
+    "gemini/gemini-1.5-pro": "gemini/gemini-3.5-flash",
+    "gemini/gemini-1.5-pro-latest": "gemini/gemini-3.5-flash",
+    "gemini/gemini-2.0-flash": "gemini/gemini-3.5-flash",
+    "gemini/gemini-2.0-flash-lite": "gemini/gemini-3.5-flash-lite",
+    "groq/llama3-8b-8192": "groq/openai/gpt-oss-20b",
+    "groq/llama3-70b-8192": "groq/openai/gpt-oss-120b",
+    "groq/llama-3.1-8b-instant": "groq/openai/gpt-oss-20b",
+    "groq/llama-3.3-70b-versatile": "groq/openai/gpt-oss-120b",
+}
+
+
 class Settings(BaseSettings):
     """
     Single source of truth for all runtime configuration.
@@ -51,11 +68,11 @@ class Settings(BaseSettings):
     )
 
     primary_model: str = Field(
-        default="gemini/gemini-1.5-flash-latest",
+        default="gemini/gemini-3.5-flash",
         description="LiteLLM model string for complex tasks",
     )
     fast_model: str = Field(
-        default="groq/llama3-8b-8192",
+        default="groq/openai/gpt-oss-20b",
         description="LiteLLM model string for cheap/fast tasks",
     )
     fallback_model: str = Field(
@@ -111,6 +128,13 @@ class Settings(BaseSettings):
     @property
     def data_dir(self) -> Path:
         return Path("./data")
+
+    @field_validator("primary_model", "fast_model", "fallback_model", mode="before")
+    @classmethod
+    def _upgrade_retired_models(cls, v: object) -> str:
+        """Swap model names the providers have shut down for their current replacements."""
+        name = str(v or "").strip()
+        return RETIRED_MODEL_REPLACEMENTS.get(name, name)
 
     @field_validator("chroma_persist_dir", "github_app_private_key_path", mode="before")
     @classmethod

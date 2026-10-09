@@ -7,8 +7,11 @@ local git repository management, and running the review pipeline.
 
 Week 6 adds a human approval flow:
   POST /api/review/start                 -> run in approval mode, pause at patches
-  POST /api/review/{thread_id}/decision  -> approve/reject, then finish the run
-  GET  /approve                          -> simple approval page
+  POST /api/review/{thread_id}/decision  -> approve/reject; verifies approved patches,
+                                            may pause again if a retry needs approval
+  GET  /api/review/{thread_id}/audit     -> audit trail for one review run
+  GET  /api/audit                        -> most recent audit events
+  GET  /approve                          -> the patch approval page
 """
 
 from __future__ import annotations
@@ -23,10 +26,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+import core.audit as audit
 from core.config import settings
+from core.llm import provider_available
 from core.logging import get_logger
 from core.orchestrator import resume_review, run_review, start_review
 from core.state import ApprovalDecision, ApprovalStatus, ChangeSet
+from tools.build_calc_demo import default_demo_path
 
 logger = get_logger(__name__)
 
@@ -96,6 +102,10 @@ def _dump_list(items: Any) -> list[Any]:
     ]
 
 
+def _dump_one(item: Any) -> Any:
+    return item.model_dump(mode="json") if hasattr(item, "model_dump") else item
+
+
 def _serialize_run(run: dict[str, Any]) -> dict[str, Any]:
     """Turn a start_review/resume_review result into JSON-friendly output."""
     s = run.get("state") or {}
@@ -115,8 +125,24 @@ def _serialize_run(run: dict[str, Any]) -> dict[str, Any]:
         "regressions": _dump_list(s.get("regressions")),
         "patches": _dump_list(s.get("patches")),
         "approved_patches": _dump_list(s.get("approved_patches")),
+        "verifier_output": _dump_one(s.get("verifier_output")),
+        "verification_history": s.get("verification_history") or [],
+        "escalated": bool(s.get("escalated")),
         "report_markdown": s.get("report_markdown"),
     }
+
+
+def _changeset_from(payload: ReviewRunRequest) -> ChangeSet:
+    repo = Path(payload.repo_path).resolve()
+    if not (repo / ".git").exists():
+        raise HTTPException(status_code=400, detail=f"Not a git repository: {repo}")
+    return ChangeSet(
+        repo_path=repo,
+        base_ref=payload.base_ref,
+        head_ref=payload.head_ref,
+        pr_number=payload.pr_number,
+        pr_title=payload.pr_title,
+    )
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -168,6 +194,9 @@ def get_system_status() -> dict[str, Any]:
         "has_groq_key": bool(settings.groq_api_key),
         "current_repo_path": str(local_repo),
         "current_branch": current_branch,
+        "demo_repo_path": str(default_demo_path()),
+        "llm_ready": provider_available(settings.primary_model) or provider_available(settings.fast_model),
+        "max_fix_iterations": settings.max_fix_iterations,
     }
 
 
@@ -300,7 +329,10 @@ def list_github_pulls(payload: GitHubPullsRequest) -> dict[str, Any]:
 
 @app.post("/api/review/run")
 def trigger_review(payload: ReviewRunRequest) -> dict[str, Any]:
-    """Execute the full review pipeline without pausing for approval."""
+    """
+    Execute the Day 5 pipeline:
+      ingest → impact → merge_simulation → report
+    """
     repo = Path(payload.repo_path).resolve()
     if not (repo / ".git").exists():
         raise HTTPException(status_code=400, detail=f"Not a git repository: {repo}")
@@ -372,18 +404,7 @@ def start_review_with_approval(payload: ReviewRunRequest) -> dict[str, Any]:
     Week 6: run the pipeline in approval mode.
     If patches are proposed, the run pauses and returns them under "pending_approval".
     """
-    repo = Path(payload.repo_path).resolve()
-    if not (repo / ".git").exists():
-        raise HTTPException(status_code=400, detail=f"Not a git repository: {repo}")
-
-    cs = ChangeSet(
-        repo_path=repo,
-        base_ref=payload.base_ref,
-        head_ref=payload.head_ref,
-        pr_number=payload.pr_number,
-        pr_title=payload.pr_title,
-    )
-
+    cs = _changeset_from(payload)
     try:
         return _serialize_run(start_review(cs))
     except Exception as exc:
@@ -393,14 +414,16 @@ def start_review_with_approval(payload: ReviewRunRequest) -> dict[str, Any]:
 
 @app.post("/api/review/{thread_id}/decision")
 def submit_approval_decision(thread_id: str, payload: ApprovalRequest) -> dict[str, Any]:
-    """Week 6: send the human's approve/reject decision and finish the paused run."""
+    """
+    Week 6: send the human's approve/reject decision. Approved patches are verified.
+    If verification fails and retries remain, the run pauses again with a new fix.
+    """
     decision = ApprovalDecision(
         status=ApprovalStatus.APPROVED if payload.approve else ApprovalStatus.REJECTED,
         approved_patch_indices=payload.approved_patch_indices if payload.approve else [],
         reviewed_by=payload.reviewed_by,
         feedback=payload.feedback,
     )
-
     try:
         return _serialize_run(resume_review(thread_id, decision))
     except ValueError as exc:
@@ -408,6 +431,18 @@ def submit_approval_decision(thread_id: str, payload: ApprovalRequest) -> dict[s
     except Exception as exc:
         logger.error("review_resume_error", error=str(exc))
         raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}") from exc
+
+
+@app.get("/api/review/{thread_id}/audit")
+def get_review_audit(thread_id: str) -> dict[str, Any]:
+    """Week 6: every approval, verification and escalation recorded for one review run."""
+    return {"thread_id": thread_id, "events": audit.audit_log.events(thread_id=thread_id)}
+
+
+@app.get("/api/audit")
+def get_recent_audit(limit: int = 50) -> dict[str, Any]:
+    """Week 6: the most recent audit events across all review runs."""
+    return {"events": audit.audit_log.events(limit=max(1, min(limit, 500)))}
 
 
 @app.post("/api/indexer/search")

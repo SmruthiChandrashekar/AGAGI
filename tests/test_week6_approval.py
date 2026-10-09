@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, StateGraph
 from langgraph.types import Command
 
+import core.audit as audit_mod
+from core.audit import AuditLog
 from core.orchestrator import node_approval
 from core.state import ApprovalDecision, ApprovalStatus, Patch, ReviewState
+
+
+@pytest.fixture(autouse=True)
+def isolated_audit(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(audit_mod, "audit_log", AuditLog(tmp_path / "audit.db"))
 
 
 def _mini_graph():  # type: ignore[no-untyped-def]
@@ -37,6 +45,7 @@ def test_approval_skipped_when_not_required() -> None:
     out = g.invoke({"patches": [_patch("a.py")], "require_approval": False}, cfg)
     assert g.get_state(cfg).next == ()
     assert not any(p.approved for p in out["patches"])
+    assert out["approved_patches"] == []
 
 
 def test_approval_skipped_when_no_patches() -> None:
