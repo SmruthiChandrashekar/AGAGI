@@ -3,8 +3,12 @@ ui/server.py
 ------------
 FastAPI backend for the Phosphor HUD Agentic Code Reviewer.
 Provides endpoints for GitHub repository & PR exploration,
-local git repository management, and running the Day 5 pipeline:
-  ingest → impact → merge_simulation → report
+local git repository management, and running the review pipeline.
+
+Week 6 adds a human approval flow:
+  POST /api/review/start                 -> run in approval mode, pause at patches
+  POST /api/review/{thread_id}/decision  -> approve/reject, then finish the run
+  GET  /approve                          -> simple approval page
 """
 
 from __future__ import annotations
@@ -21,8 +25,8 @@ from pydantic import BaseModel, Field
 
 from core.config import settings
 from core.logging import get_logger
-from core.orchestrator import run_review
-from core.state import ChangeSet
+from core.orchestrator import resume_review, run_review, start_review
+from core.state import ApprovalDecision, ApprovalStatus, ChangeSet
 
 logger = get_logger(__name__)
 
@@ -74,6 +78,47 @@ class CodeSearchRequest(BaseModel):
     repo_path: str = Field(default=".", description="Path to repository")
 
 
+class ApprovalRequest(BaseModel):
+    """Week 6: the human's answer to a paused review."""
+
+    approve: bool = Field(description="True to approve the listed patches, False to reject all")
+    approved_patch_indices: list[int] = Field(default_factory=list)
+    reviewed_by: str | None = None
+    feedback: str | None = None
+
+
+# ── Week 6 helpers ───────────────────────────────────────────────────────────
+
+
+def _dump_list(items: Any) -> list[Any]:
+    return [
+        (x.model_dump(mode="json") if hasattr(x, "model_dump") else x) for x in (items or [])
+    ]
+
+
+def _serialize_run(run: dict[str, Any]) -> dict[str, Any]:
+    """Turn a start_review/resume_review result into JSON-friendly output."""
+    s = run.get("state") or {}
+    return {
+        "success": True,
+        "thread_id": run.get("thread_id"),
+        "paused": run.get("paused", False),
+        "pending_approval": run.get("pending_approval"),
+        "stage": s.get("stage"),
+        "verdict": s.get("verdict"),
+        "risk_score": s.get("risk_score"),
+        "merge_outcome": s.get("merge_outcome"),
+        "approval_status": s.get("approval_status"),
+        "findings": _dump_list(s.get("findings")),
+        "review_findings": _dump_list(s.get("review_findings")),
+        "root_causes": _dump_list(s.get("root_causes")),
+        "regressions": _dump_list(s.get("regressions")),
+        "patches": _dump_list(s.get("patches")),
+        "approved_patches": _dump_list(s.get("approved_patches")),
+        "report_markdown": s.get("report_markdown"),
+    }
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 
@@ -84,6 +129,15 @@ def serve_index() -> FileResponse:
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="index.html not found")
     return FileResponse(index_path)
+
+
+@app.get("/approve")
+def serve_approve_page() -> FileResponse:
+    """Week 6: serve the patch approval page."""
+    page = UI_DIR / "approve.html"
+    if not page.exists():
+        raise HTTPException(status_code=404, detail="approve.html not found")
+    return FileResponse(page)
 
 
 @app.get("/api/status")
@@ -246,10 +300,7 @@ def list_github_pulls(payload: GitHubPullsRequest) -> dict[str, Any]:
 
 @app.post("/api/review/run")
 def trigger_review(payload: ReviewRunRequest) -> dict[str, Any]:
-    """
-    Execute the Day 5 pipeline:
-      ingest → impact → merge_simulation → report
-    """
+    """Execute the full review pipeline without pausing for approval."""
     repo = Path(payload.repo_path).resolve()
     if not (repo / ".git").exists():
         raise HTTPException(status_code=400, detail=f"Not a git repository: {repo}")
@@ -312,6 +363,50 @@ def trigger_review(payload: ReviewRunRequest) -> dict[str, Any]:
         }
     except Exception as exc:
         logger.error("review_pipeline_error", error=str(exc))
+        raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}") from exc
+
+
+@app.post("/api/review/start")
+def start_review_with_approval(payload: ReviewRunRequest) -> dict[str, Any]:
+    """
+    Week 6: run the pipeline in approval mode.
+    If patches are proposed, the run pauses and returns them under "pending_approval".
+    """
+    repo = Path(payload.repo_path).resolve()
+    if not (repo / ".git").exists():
+        raise HTTPException(status_code=400, detail=f"Not a git repository: {repo}")
+
+    cs = ChangeSet(
+        repo_path=repo,
+        base_ref=payload.base_ref,
+        head_ref=payload.head_ref,
+        pr_number=payload.pr_number,
+        pr_title=payload.pr_title,
+    )
+
+    try:
+        return _serialize_run(start_review(cs))
+    except Exception as exc:
+        logger.error("review_start_error", error=str(exc))
+        raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}") from exc
+
+
+@app.post("/api/review/{thread_id}/decision")
+def submit_approval_decision(thread_id: str, payload: ApprovalRequest) -> dict[str, Any]:
+    """Week 6: send the human's approve/reject decision and finish the paused run."""
+    decision = ApprovalDecision(
+        status=ApprovalStatus.APPROVED if payload.approve else ApprovalStatus.REJECTED,
+        approved_patch_indices=payload.approved_patch_indices if payload.approve else [],
+        reviewed_by=payload.reviewed_by,
+        feedback=payload.feedback,
+    )
+
+    try:
+        return _serialize_run(resume_review(thread_id, decision))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("review_resume_error", error=str(exc))
         raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}") from exc
 
 

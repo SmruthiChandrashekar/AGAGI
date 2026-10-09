@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patch Approval</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --text:#e6edf3; --muted:#8b949e; --accent:#3fb950; --danger:#f85149; --border:#30363d; }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; max-width: 960px; padding: 24px 16px; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-top: 10px; }
+  input[type=text] { width: 100%; padding: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
+  button { margin: 14px 8px 0 0; padding: 9px 16px; border: 0; border-radius: 6px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .go { background: var(--accent); color: #000; }
+  .no { background: var(--danger); color: #fff; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 14px; }
+  .card label { color: var(--text); font-size: 15px; font-weight: 600; margin: 0; }
+  pre { background: #010409; padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  #status { margin-top: 16px; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>Patch Approval</h1>
+  <p class="muted">Runs the review in approval mode. Nothing is applied unless you approve it.</p>
+
+  <label for="repo">Repository path</label>
+  <input type="text" id="repo" placeholder="C:\path\to\repo">
+  <label for="base">Base ref</label>
+  <input type="text" id="base" value="main">
+  <label for="head">Head ref</label>
+  <input type="text" id="head" value="breaks-test">
+  <label for="who">Your name (recorded as approver)</label>
+  <input type="text" id="who" placeholder="sarthak">
+
+  <button class="go" id="run">Run review (approval mode)</button>
+
+  <div id="status"></div>
+  <div id="patches"></div>
+  <div id="actions" hidden>
+    <button class="go" id="approve">Approve selected</button>
+    <button class="no" id="reject">Reject all</button>
+  </div>
+  <div id="result"></div>
+
+<script>
+  let threadId = null;
+  const $ = (id) => document.getElementById(id);
+  const setStatus = (t) => { $("status").textContent = t; };
+
+  async function post(url, body) {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    return data;
+  }
+
+  function renderPatches(patches) {
+    const box = $("patches");
+    box.innerHTML = "";
+    patches.forEach((p) => {
+      const card = document.createElement("div");
+      card.className = "card";
+
+      const label = document.createElement("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.className = "pick";
+      cb.value = p.index;
+      cb.style.marginRight = "8px";
+      const files = (p.target_files || []).join(", ") || "unknown file";
+      label.append(cb, `Patch ${p.index}: ${files}`);
+
+      const why = document.createElement("p");
+      why.className = "muted";
+      why.textContent = p.rationale || "";
+
+      const diff = document.createElement("pre");
+      diff.textContent = p.unified_diff || "";
+
+      card.append(label, why, diff);
+      box.append(card);
+    });
+  }
+
+  function renderResult(d) {
+    const box = $("result");
+    box.innerHTML = "";
+    const card = document.createElement("div");
+    card.className = "card";
+
+    const summary = document.createElement("p");
+    summary.textContent =
+      `Verdict: ${d.verdict ?? "n/a"} · Approval: ${d.approval_status ?? "n/a"} · ` +
+      `Approved patches: ${(d.approved_patches || []).length}`;
+
+    const report = document.createElement("pre");
+    report.style.whiteSpace = "pre-wrap";
+    report.textContent = d.report_markdown || "(no report)";
+
+    card.append(summary, report);
+    box.append(card);
+  }
+
+  $("run").onclick = async () => {
+    $("run").disabled = true;
+    $("patches").innerHTML = "";
+    $("result").innerHTML = "";
+    $("actions").hidden = true;
+    setStatus("Running review... this can take a few minutes.");
+    try {
+      const data = await post("/api/review/start", {
+        repo_path: $("repo").value,
+        base_ref: $("base").value,
+        head_ref: $("head").value,
+      });
+      threadId = data.thread_id;
+      if (data.paused && data.pending_approval) {
+        renderPatches(data.pending_approval.patches || []);
+        $("actions").hidden = false;
+        setStatus("Paused: tick the patches you approve, then choose below.");
+      } else {
+        setStatus("Finished. No patches needed approval.");
+        renderResult(data);
+      }
+    } catch (e) {
+      setStatus("Error: " + e.message);
+    } finally {
+      $("run").disabled = false;
+    }
+  };
+
+  async function decide(approve) {
+    const picked = [...document.querySelectorAll(".pick:checked")].map((c) => Number(c.value));
+    if (approve && picked.length === 0) {
+      setStatus("Tick at least one patch, or click Reject all.");
+      return;
+    }
+    $("approve").disabled = $("reject").disabled = true;
+    setStatus("Resuming pipeline...");
+    try {
+      const data = await post(`/api/review/${threadId}/decision`, {
+        approve,
+        approved_patch_indices: approve ? picked : [],
+        reviewed_by: $("who").value || null,
+      });
+      $("actions").hidden = true;
+      setStatus(`Decision recorded: ${data.approval_status}`);
+      renderResult(data);
+    } catch (e) {
+      setStatus("Error: " + e.message);
+    } finally {
+      $("approve").disabled = $("reject").disabled = false;
+    }
+  }
+
+  $("approve").onclick = () => decide(true);
+  $("reject").onclick = () => decide(false);
+</script>
+</body>
+</html>
