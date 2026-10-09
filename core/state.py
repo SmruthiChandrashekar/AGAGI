@@ -425,6 +425,7 @@ class ReviewState(TypedDict, total=False):
     stage: PipelineStage
     iteration_count: int
     iteration: int  # compatibility alias
+    thread_id: str | None  # Week 6: identifies a paused run so it can be resumed
 
     # Diff
     diff: str
@@ -464,6 +465,9 @@ class ReviewState(TypedDict, total=False):
     patches: list[Patch]
     patch_proposals: list[Patch]  # compatibility alias
     approval_status: ApprovalStatus
+    require_approval: bool  # Week 6: pause for a human decision when patches exist
+    approval_decision: ApprovalDecision | None  # Week 6: the human's answer
+    approved_patches: list[Patch]  # Week 6: only the patches the human explicitly approved
 
     # Verification (post-patch)
     verification_result: SimulationResult | None
@@ -480,7 +484,7 @@ class ReviewState(TypedDict, total=False):
     error: str | None
 
 
-def make_initial_state(changeset: ChangeSet) -> ReviewState:
+def make_initial_state(changeset: ChangeSet, require_approval: bool = False) -> ReviewState:
     """Factory that produces a fully-initialised ReviewState."""
     now = datetime.utcnow()
     return ReviewState(
@@ -489,6 +493,7 @@ def make_initial_state(changeset: ChangeSet) -> ReviewState:
         stage=PipelineStage.INIT,
         iteration_count=0,
         iteration=0,
+        thread_id=None,
         diff="",
         raw_diff="",
         repo_index_id=None,
@@ -515,6 +520,9 @@ def make_initial_state(changeset: ChangeSet) -> ReviewState:
         patches=[],
         patch_proposals=[],
         approval_status=ApprovalStatus.PENDING,
+        require_approval=require_approval,
+        approval_decision=None,
+        approved_patches=[],
         verification_result=None,
         verdict=None,
         risk_score=None,
