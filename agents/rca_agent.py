@@ -147,6 +147,43 @@ def _gather_context_files(
     return wanted[:MAX_CONTEXT_FILES]
 
 
+def _build_failure_text(state: ReviewState) -> str:
+    """Output of a build/import failure in the merged code, or '' when the build was fine."""
+    outcome = str(state.get("merge_outcome") or "").lower()
+    if outcome not in ("build error", "install error"):
+        return ""
+    merge_res = state.get("merge_result")
+    log = getattr(merge_res, "build_log_snippet", "") or getattr(merge_res, "test_log_snippet", "") or ""
+    return str(log) or f"The merged code failed with: {outcome}."
+
+
+def _build_failure_cause(build_log: str, workspace: Path) -> RootCause | None:
+    """Blame the last project source file named in a build/import traceback."""
+    if not build_log:
+        return None
+    frames = re.findall(r'File "([^"]+)", line (\d+)', build_log)
+    project = [
+        (f, int(n))
+        for f, n in frames
+        if "site-packages" not in f and "<frozen" not in f and "/lib/python" not in f.replace("\\", "/")
+    ]
+    errors = re.findall(r"^(?:E\s+)?\W*(\w*(?:Error|Exception)): (.+)$", build_log, flags=re.MULTILINE)
+    error_text = f"{errors[-1][0]}: {errors[-1][1].strip()}" if errors else "the build failed"
+    if not project:
+        return None
+    raw_file, line = project[-1]
+    rel = _resolve_in_workspace(workspace, raw_file) or raw_file.replace("\\", "/")
+    return RootCause(
+        root_cause_file=rel,
+        root_cause_line=line,
+        explanation=(
+            f"The merged code does not build: {error_text} at {rel}:{line}. "
+            "Fix the syntax or import error at that line so the code can load and the tests can run."
+        ),
+        confidence=0.6,
+    )
+
+
 # ── Offline fallback ─────────────────────────────────────────────────────────
 
 
@@ -156,6 +193,7 @@ def heuristic_root_causes(
     diff: str,
     changed_functions: list[Any],
     workspace: Path,
+    build_log: str = "",
 ) -> list[RootCause]:
     """
     Rule-based diagnosis used when the AI is unavailable.
@@ -165,6 +203,10 @@ def heuristic_root_causes(
     the test that reported it. All failures naming the same function are grouped.
     """
     root_causes: list[RootCause] = []
+
+    build_cause = _build_failure_cause(build_log, workspace)
+    if build_cause:
+        root_causes.append(build_cause)
 
     # Functions this change touched: from the impact graph and from 'def' lines in the diff.
     changed_defs: dict[str, str] = {}
@@ -232,7 +274,7 @@ def heuristic_root_causes(
     for f in issues:
         root_causes.append(
             RootCause(
-                root_cause_file=f.file or "unknown",
+                root_cause_file=(f.file or "unknown").replace("\\", "/").removeprefix("./"),
                 root_cause_line=f.line,
                 explanation=f.explanation or f.title,
                 finding_id=f.id,
@@ -262,8 +304,10 @@ def run_rca_agent(state: ReviewState) -> dict[str, Any]:
     review_findings: list[Finding] = state.get("review_findings") or []
     all_issues_to_diagnose = list(findings) + list(review_findings)
 
-    # If no regressions and no confirmed issues, no root-cause analysis is needed
-    if not regressions and not all_issues_to_diagnose:
+    build_log = _build_failure_text(state)
+
+    # Nothing to diagnose only if tests pass, nothing was found, and the code builds
+    if not regressions and not all_issues_to_diagnose and not build_log:
         logger.info("rca_agent_skipped_no_issues")
         return {"root_causes": []}
 
@@ -279,7 +323,7 @@ def run_rca_agent(state: ReviewState) -> dict[str, Any]:
     with workspace_cm as ws:
         workspace = Path(ws).resolve()
         root_causes = _diagnose(
-            workspace, regressions, all_issues_to_diagnose, diff, changed_functions, feedback
+            workspace, regressions, all_issues_to_diagnose, diff, changed_functions, feedback, build_log
         )
 
     logger.info(
@@ -297,6 +341,7 @@ def _diagnose(
     diff: str,
     changed_functions: list[Any],
     feedback: str,
+    build_log: str = "",
 ) -> list[RootCause]:
     reg_items: list[str] = []
     for r in regressions:
@@ -348,6 +393,12 @@ def _diagnose(
         f"FAILING TESTS (new since this change):\n{nl.join(reg_items) or 'None'}",
         f"CONFIRMED FINDINGS AND REVIEW BUGS:\n{nl.join(finding_items) or 'None'}",
         f"FUNCTIONS CHANGED BY THIS DIFF: {changed_fn_text}",
+        (
+            "BUILD / IMPORT FAILURE (the merged code does not even load; the root cause is the file and "
+            f"line named in the error):\n```\n{build_log[-3000:]}\n```"
+            if build_log
+            else "BUILD: ok"
+        ),
         f"GIT DIFF:\n```diff\n{diff[:6000]}\n```",
         "CODE AFTER THE MERGE (line-numbered):\n" + ("\n\n".join(file_blocks) or "(unavailable)"),
     ]
@@ -393,4 +444,4 @@ def _diagnose(
     except Exception as exc:
         logger.warning("rca_llm_failed_fallback", error=str(exc)[:300])
 
-    return heuristic_root_causes(regressions, issues, diff, changed_functions, workspace)
+    return heuristic_root_causes(regressions, issues, diff, changed_functions, workspace, build_log)

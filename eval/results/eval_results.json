@@ -1,0 +1,132 @@
+{
+  "summary": {
+    "Correct verdicts": "100% (6/6)",
+    "Real issues detected": "100% (4/4)",
+    "Root cause in the right file": "100% (4/4)",
+    "Fix proposed for the right file": "100% (4/4)",
+    "Approved fixes that verified": "100% (4/4)",
+    "False alarms on clean change": "0% (0/1)",
+    "Scenarios where AI calls failed": "0/6",
+    "Average seconds per review": "46.6s"
+  },
+  "scenarios": [
+    {
+      "branch": "clean-merge",
+      "verdict": "safe",
+      "verdict_ok": true,
+      "reported_issues": 0,
+      "found_bug": null,
+      "false_alarm": false,
+      "root_cause_files": [],
+      "root_cause_ok": null,
+      "patches_proposed": 0,
+      "patch_ok": null,
+      "verified": null,
+      "attempts": 0,
+      "escalated": false,
+      "llm_failures": 0,
+      "seconds": 13.1,
+      "error": ""
+    },
+    {
+      "branch": "breaks-test",
+      "verdict": "needs_changes",
+      "verdict_ok": true,
+      "reported_issues": 1,
+      "found_bug": true,
+      "false_alarm": false,
+      "root_cause_files": [
+        "calc.py"
+      ],
+      "root_cause_ok": true,
+      "patches_proposed": 1,
+      "patch_ok": true,
+      "verified": true,
+      "attempts": 1,
+      "escalated": false,
+      "llm_failures": 0,
+      "seconds": 39.1,
+      "error": ""
+    },
+    {
+      "branch": "conflict",
+      "verdict": "blocked",
+      "verdict_ok": true,
+      "reported_issues": 2,
+      "found_bug": null,
+      "false_alarm": false,
+      "root_cause_files": [
+        "calc.py"
+      ],
+      "root_cause_ok": null,
+      "patches_proposed": 0,
+      "patch_ok": null,
+      "verified": null,
+      "attempts": 0,
+      "escalated": false,
+      "llm_failures": 0,
+      "seconds": 26.4,
+      "error": ""
+    },
+    {
+      "branch": "build-error",
+      "verdict": "needs_changes",
+      "verdict_ok": true,
+      "reported_issues": 1,
+      "found_bug": true,
+      "false_alarm": false,
+      "root_cause_files": [
+        "calc.py"
+      ],
+      "root_cause_ok": true,
+      "patches_proposed": 1,
+      "patch_ok": true,
+      "verified": true,
+      "attempts": 1,
+      "escalated": false,
+      "llm_failures": 0,
+      "seconds": 43.8,
+      "error": ""
+    },
+    {
+      "branch": "unsafe-eval",
+      "verdict": "needs_changes",
+      "verdict_ok": true,
+      "reported_issues": 3,
+      "found_bug": true,
+      "false_alarm": false,
+      "root_cause_files": [
+        "calc.py"
+      ],
+      "root_cause_ok": true,
+      "patches_proposed": 1,
+      "patch_ok": true,
+      "verified": true,
+      "attempts": 1,
+      "escalated": false,
+      "llm_failures": 0,
+      "seconds": 87.8,
+      "error": ""
+    },
+    {
+      "branch": "hardcoded-secret",
+      "verdict": "blocked",
+      "verdict_ok": true,
+      "reported_issues": 2,
+      "found_bug": true,
+      "false_alarm": false,
+      "root_cause_files": [
+        "calc.py"
+      ],
+      "root_cause_ok": true,
+      "patches_proposed": 1,
+      "patch_ok": true,
+      "verified": true,
+      "attempts": 1,
+      "escalated": false,
+      "llm_failures": 0,
+      "seconds": 69.6,
+      "error": ""
+    }
+  ]
+}

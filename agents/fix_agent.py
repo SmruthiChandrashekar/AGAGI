@@ -224,6 +224,11 @@ def run_fix_agent(state: ReviewState) -> dict[str, Any]:
         logger.info("fix_agent_skipped_no_root_causes")
         return {"patches": [], "patch_proposals": []}
 
+    if str(state.get("merge_outcome") or "").lower() == "conflict":
+        # Merge conflicts are for a human to resolve; a patch against unmerged code would be a guess.
+        logger.info("fix_agent_skipped_merge_conflict")
+        return {"patches": [], "patch_proposals": []}
+
     feedback = state.get("verification_feedback") or ""
     accepted_patches: list[Patch] = []
 
