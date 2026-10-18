@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from agents.merge_sim_agent import _is_build_error, _run_test_suite_in_sandbox
+from tools.test_env import get_test_timeout
 from core.audit import record_for_state
 from core.logging import get_logger
 from core.state import (
@@ -158,7 +159,8 @@ def run_verifier_agent(state: ReviewState) -> dict[str, Any]:
         if not apply_errors:
             # 2. Full test suite on the patched code
             code, out, err, timed_out, all_cases = _run_test_suite_in_sandbox(
-                wt, timeout_seconds=VERIFY_TEST_TIMEOUT_SECONDS, xml_name=".verify_junit.xml"
+                wt, timeout_seconds=max(VERIFY_TEST_TIMEOUT_SECONDS, get_test_timeout()),
+                xml_name=".verify_junit.xml", repo_path=cs.repo_path,
             )
             test_log = f"{out}\n{err}".strip()
             if not timed_out and ((code == 2 and not all_cases) or _is_build_error(out, err)):

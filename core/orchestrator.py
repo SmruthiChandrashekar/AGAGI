@@ -378,3 +378,17 @@ def resume_review(thread_id: str, decision: ApprovalDecision) -> dict[str, Any]:
         config=_config(thread_id),
     )
     return _snapshot(thread_id)
+
+
+def export_verified_patch(thread_id: str) -> str:
+    """Return the approved patches that PASSED verification as one `git apply`-able diff."""
+    snap = _hitl_graph.get_state(_config(thread_id))
+    values = snap.values or {}
+    if not values:
+        raise ValueError(f"No review found for thread_id={thread_id!r}")
+    vo = values.get("verifier_output")
+    verified = bool(vo.get("verified") if isinstance(vo, dict) else getattr(vo, "verified", False))
+    approved = [p for p in values.get("approved_patches") or [] if p.approved]
+    if not verified or not approved:
+        raise ValueError("No approved and verified fix is available for this review.")
+    return "".join(p.unified_diff.rstrip("\n") + "\n" for p in approved)

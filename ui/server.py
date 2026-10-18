@@ -23,14 +23,14 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 import core.audit as audit
 from core.config import settings
 from core.llm import provider_available
 from core.logging import get_logger
-from core.orchestrator import resume_review, run_review, start_review
+from core.orchestrator import export_verified_patch, resume_review, run_review, start_review
 from core.state import ApprovalDecision, ApprovalStatus, ChangeSet
 from tools.build_calc_demo import default_demo_path
 
@@ -431,6 +431,19 @@ def submit_approval_decision(thread_id: str, payload: ApprovalRequest) -> dict[s
     except Exception as exc:
         logger.error("review_resume_error", error=str(exc))
         raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}") from exc
+
+
+@app.get("/api/review/{thread_id}/patch")
+def download_verified_patch(thread_id: str) -> PlainTextResponse:
+    """Download the approved + verified fix as a .patch file (apply with `git apply`)."""
+    try:
+        text = export_verified_patch(thread_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return PlainTextResponse(
+        text,
+        headers={"Content-Disposition": 'attachment; filename="agagi-fix.patch"'},
+    )
 
 
 @app.get("/api/review/{thread_id}/audit")

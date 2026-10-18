@@ -191,6 +191,15 @@
     det.append(report);
     card.append(det);
 
+    if (d.thread_id && vo && vo.verified && !d.escalated) {
+      const dl = el("a", "pill", "Download verified fix (.patch)");
+      dl.href = `/api/review/${d.thread_id}/patch`;
+      const hint = el("p", "muted", "Apply it in your project with:  git apply agagi-fix.patch");
+      const p0 = el("p");
+      p0.append(dl);
+      card.append(p0, hint);
+    }
+
     if (d.thread_id) {
       const a = el("a", "", "Audit trail for this review");
       a.href = `/api/review/${d.thread_id}/audit`;

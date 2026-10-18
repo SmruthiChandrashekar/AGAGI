@@ -33,6 +33,7 @@ from tools.git_ops import (
 )
 from tools.junit_parser import parse_junit_xml
 from tools.project_detector import detect_project
+from tools.test_env import get_test_command_override, get_test_timeout, resolve_test_python
 
 logger = get_logger(__name__)
 
@@ -72,13 +73,14 @@ def _run_test_suite_in_sandbox(
     wt_dir: Path,
     timeout_seconds: int = 60,
     xml_name: str = ".test_results.xml",
+    repo_path: Path | str | None = None,
 ) -> tuple[int, str, str, bool, list[TestCaseResult]]:
     """
     Execute tests inside an isolated sandbox with JUnit XML generation.
     Returns: (exit_code, stdout, stderr, timed_out, parsed_test_cases).
     """
     project_info = detect_project(wt_dir)
-    test_cmd = project_info.test_command or "pytest"
+    test_cmd = get_test_command_override() or project_info.test_command or "pytest"
 
     xml_path = wt_dir / xml_name
     if xml_path.exists():
@@ -116,7 +118,8 @@ def _run_test_suite_in_sandbox(
     else:
         # 2. Local isolated subprocess fallback
         if cmd_to_run.startswith("pytest"):
-            cmd_exec = f'"{sys.executable}" -m ' + cmd_to_run
+            py = resolve_test_python(repo_path)
+            cmd_exec = f'"{py}" -m ' + cmd_to_run
         else:
             cmd_exec = cmd_to_run
 
@@ -226,7 +229,8 @@ def run_merge_simulation_agent(state: ReviewState) -> dict[str, Any]:
     try:
         base_wt = create_worktree(cs.repo_path, cs.base_ref)
         b_code, b_out, b_err, b_timeout, b_cases = _run_test_suite_in_sandbox(
-            base_wt, timeout_seconds=45, xml_name=".base_junit.xml"
+            base_wt, timeout_seconds=get_test_timeout(), xml_name=".base_junit.xml",
+            repo_path=cs.repo_path,
         )
         for tc in b_cases:
             if tc.status in ("failed", "error"):
@@ -254,7 +258,8 @@ def run_merge_simulation_agent(state: ReviewState) -> dict[str, Any]:
             logger.info("merged_worktree_unavailable_using_head", error=str(merge_exc)[:200])
             merged_wt = create_worktree(cs.repo_path, cs.head_ref)
         m_code, m_out, m_err, m_timeout, m_cases = _run_test_suite_in_sandbox(
-            merged_wt, timeout_seconds=45, xml_name=".merged_junit.xml"
+            merged_wt, timeout_seconds=get_test_timeout(), xml_name=".merged_junit.xml",
+            repo_path=cs.repo_path,
         )
         combined_logs = f"{m_out}\n{m_err}".strip()
 
