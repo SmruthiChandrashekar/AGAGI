@@ -381,7 +381,11 @@ def resume_review(thread_id: str, decision: ApprovalDecision) -> dict[str, Any]:
 
 
 def export_verified_patch(thread_id: str) -> str:
-    """Return the approved patches that PASSED verification as one `git apply`-able diff."""
+    """
+    Return the human-approved patches that PASSED verification as one `git apply`-able diff.
+
+    Raises ValueError if the review is unknown, or has no verified approved fix yet.
+    """
     snap = _hitl_graph.get_state(_config(thread_id))
     values = snap.values or {}
     if not values:
@@ -391,4 +395,72 @@ def export_verified_patch(thread_id: str) -> str:
     approved = [p for p in values.get("approved_patches") or [] if p.approved]
     if not verified or not approved:
         raise ValueError("No approved and verified fix is available for this review.")
-    return "".join(p.unified_diff.rstrip("\n") + "\n" for p in approved)
+    raw = "".join(p.unified_diff.rstrip("\n") + "\n" for p in approved)
+    cs = values.get("changeset")
+    if cs is None:
+        return raw
+    return _canonical_patch(cs, approved) or raw
+
+
+def _canonical_patch(cs: Any, approved: list[Any]) -> str:
+    """
+    Rebuild the patch from real file contents so plain `git apply` accepts it.
+
+    Model-written patches often have wrong line counts in their @@ headers. AGAGI
+    applies them with --recount; a developer running `git apply` would not. So we
+    apply the patches in a throwaway merged copy and let git write the exact diff.
+    The merged code can differ from the developer's own branch, so we try wide
+    context first, then narrow context, and keep the first version that plain
+    `git apply --check` accepts on the reviewed branch. Returns "" if none works
+    (the caller then uses the original text).
+    """
+    import subprocess
+    import tempfile
+
+    from tools.git_ops import (
+        _run_git,
+        apply_patch,
+        cleanup_worktree,
+        create_merged_worktree,
+        create_worktree,
+    )
+
+    merged = head = None
+    try:
+        merged = create_merged_worktree(cs.repo_path, cs.base_ref, cs.head_ref)
+        if not all(apply_patch(merged, p.unified_diff)[0] for p in approved):
+            return ""
+        head = create_worktree(cs.repo_path, cs.head_ref)
+        candidates: list[str] = []
+        for context in (3, 1):
+            res = _run_git(["diff", "--no-color", f"-U{context}"], cwd=merged, check=False)
+            if res.returncode == 0 and res.stdout.strip():
+                candidates.append(res.stdout)
+        for text in candidates:
+            with tempfile.NamedTemporaryFile("w", suffix=".patch", delete=False, newline="\n") as tmp:
+                tmp.write(text)
+                name = tmp.name
+            try:
+                chk = subprocess.run(
+                    ["git", "apply", "--check", name],
+                    cwd=str(head), capture_output=True, text=True,
+                )
+            finally:
+                try:
+                    import os
+
+                    os.unlink(name)
+                except OSError:
+                    pass
+            if chk.returncode == 0:
+                return text
+        return candidates[0] if candidates else ""
+    except Exception:
+        return ""
+    finally:
+        for wt in (merged, head):
+            if wt is not None:
+                try:
+                    cleanup_worktree(cs.repo_path, wt)
+                except Exception:
+                    pass
