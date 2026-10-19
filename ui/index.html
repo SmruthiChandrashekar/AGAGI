@@ -554,10 +554,10 @@
         </button>
       </div>
 
-      <!-- Card: Code Search / Retrieval (Week 2) -->
+      <!-- Card: Code Search / Retrieval -->
       <div class="card">
         <div class="card-title">
-          <span>Code Retriever (Week 2)</span>
+          <span>Code Retriever</span>
           <span class="card-tag">AST + Tokens</span>
         </div>
         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
@@ -639,9 +639,9 @@
     <!-- Details Tabs -->
     <div class="card" style="padding: 16px;">
       <div class="tabs-header">
-        <button class="tab-btn active" onclick="switchTab('impact')">Impact Analysis (Week 2)</button>
+        <button class="tab-btn active" onclick="switchTab('impact')">Impact Analysis</button>
         <button class="tab-btn" onclick="switchTab('security')">Security & Triage</button>
-        <button class="tab-btn" onclick="switchTab('fixes')">RCA & Fixes (Week 5)</button>
+        <button class="tab-btn" onclick="switchTab('fixes')">RCA & Fixes</button>
         <button class="tab-btn" onclick="switchTab('tests')">Merge & Test Logs</button>
         <button class="tab-btn" onclick="switchTab('diff')">Git Diff</button>
         <button class="tab-btn" onclick="switchTab('report')">Full Report</button>
@@ -672,7 +672,7 @@
         <div id="listFindings" style="display: flex; flex-direction: column; gap: 12px;"></div>
       </div>
 
-      <!-- Tab: RCA & Fixes (Week 5) -->
+      <!-- Tab: RCA & Fixes -->
       <div class="tab-pane" id="tabFixes">
         <div id="fixesAlert" class="risk-alert" style="margin-bottom: 14px;">Diagnoses root causes and generates verified unified diff patches.</div>
         <div id="listRootCauses" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;"></div>
@@ -985,7 +985,7 @@
       document.getElementById('metricFiles').textContent = (data.affected_files || []).length;
       document.getElementById('metricTests').textContent = (data.affected_tests || []).length;
 
-      // Impact Details (Week 2)
+      // Impact Details
       document.getElementById('riskHintAlert').textContent = data.risk_hint || 'No risk hint available.';
 
       const funcsEl = document.getElementById('listChangedFuncs');
@@ -1084,7 +1084,7 @@
         }).join('');
       }
 
-      // Root Causes & Patches (Week 5)
+      // Root Causes & Patches
       const rootCauses = data.root_causes || [];
       const patches = data.patches || [];
       const fixesAlert = document.getElementById('fixesAlert');
